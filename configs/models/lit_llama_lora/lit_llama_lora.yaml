@@ -1,0 +1,4 @@
+model:
+  class_path: project.models.lit_llama_lora.LitLlamaLora
+  init_args:
+    ckpt_path: "/data/terencewang/llama2-hf"
