@@ -5,24 +5,22 @@ trainer:
       project: UNC-Project
       entity: wloner0809
       save_dir: work_dirs
+      name: Medmcqa_lora
       offline: false
       tags: []
-    # class_path: lightning.pytorch.loggers.TensorBoardLogger
-    # init_args:
-    #   save_dir: work_dirs
+  # not save ckpt here for saving disk space
+  enable_checkpointing: True
   callbacks:
     - class_path: lightning_template.utils.callbacks.model_checkpoint.ModelCheckpointWithLinkBest
       init_args:
         monitor: val/loss
         filename: "epoch:{epoch}-val_loss:{val/loss:.4g}"
-        save_top_k: 3
-        save_last: true
+        save_top_k: 1
+        save_last: false
         save_best: true
         mode: min
         auto_insert_metric_name: false
-    # - class_path: lightning_template.utils.callbacks.set_rich_traceback_handler.SetRichTracebackHandlerCallback
-    #   init_args:
-    #     show_locals: true
+        save_weights_only: true
     - class_path: lightning_template.utils.progress.rich_progress.RichProgressBar
       init_args:
         show_version: false
@@ -84,7 +82,12 @@ trainer:
   #   init_args:
   #     find_unused_parameters: false
   #     gradient_as_bucket_view: true
-  precision: 16
+  precision: bf16-true
+  # plugins:
+  #   class_path: lightning.pytorch.plugins.precision.BitsandbytesPrecision
+  #   init_args:
+  #     mode: int8
+
   sync_batchnorm: false
   accumulate_grad_batches: 1
   use_distributed_sampler: true

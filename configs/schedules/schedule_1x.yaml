@@ -13,4 +13,4 @@ optimizer_config:
       warmup_iters: 500
 
 trainer:
-  max_epochs: 3
+  max_epochs: 12
