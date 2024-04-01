@@ -1,11 +1,14 @@
 from lightning_template import LightningModule
-from transformers import AutoModelForSequenceClassification
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoModelForCausalLM,
+)
 from peft import LoraConfig, get_peft_model, TaskType
 from torchmetrics import ConfusionMatrix
 import os
 
 
-class LitLlamaLora(LightningModule):
+class LitLlamaLora_BinaryTask(LightningModule):
     def __init__(
         self,
         ckpt_path,
@@ -85,3 +88,54 @@ class LitLlamaLora(LightningModule):
             fig.savefig(
                 os.path.join(self.predict_path, "confusion_matrix/confusion_matrix.png")
             )
+
+
+class LitLlamaLora_CausalTask(LightningModule):
+    def __init__(
+        self,
+        ckpt_path,
+        *args,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+        self.r = 16
+        self.lora_alpha = 16
+        self.lora_dropout = 0.05
+        self.ckpt_path = ckpt_path
+
+    def configure_model(self):
+        if self.model_not_configured:
+            self.model = AutoModelForCausalLM.from_pretrained(
+                pretrained_model_name_or_path=self.ckpt_path,
+            )
+            config = LoraConfig(
+                r=self.r,
+                lora_alpha=self.lora_alpha,
+                lora_dropout=self.lora_dropout,
+                target_modules=[
+                    "q_proj",
+                    "v_proj",
+                ],
+                bias="none",
+                task_type=TaskType.CAUSAL_LM,
+            )
+            self.model = get_peft_model(self.model, config)
+            self.model.config.pad_token_id = self.model.config.eos_token_id
+            super().configure_model()
+
+    def forward(self, batch, *args, **kwargs):
+        outputs = self.model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            labels=batch["labels"],
+        )
+        return {
+            "loss_dict": {
+                "loss_cls": outputs.loss,
+                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
+            },
+            "metric_dict": {},
+        }
