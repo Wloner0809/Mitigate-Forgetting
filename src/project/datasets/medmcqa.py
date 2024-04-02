@@ -50,7 +50,7 @@ class Prompter(object):
 
 class MedmcqaDataset(Dataset):
     # split the dataset into train, valid, test with ratio 8:1:1
-    SAMPLE_NUM = {"train": 16000, "valid": 2000, "test": 2000}
+    SAMPLE_NUM = {"train": 30000, "valid": 2000, "test": 2000}
 
     def __init__(self, subset) -> None:
         super().__init__()
@@ -145,7 +145,7 @@ class MedmcqaDataset(Dataset):
         full_prompt = prompter.generate_prompt(
             instruction=data["instruction"],
             input=data["input"],
-            label=data["output"],
+            label=data["output"],  # do not need in inference stage
         )
         tokenized_full_prompt = tokenize(full_prompt)
         if not train_on_inputs:

@@ -2,6 +2,7 @@ from lightning_template import LightningModule
 from transformers import (
     AutoModelForSequenceClassification,
     AutoModelForCausalLM,
+    AutoTokenizer,
 )
 from peft import LoraConfig, get_peft_model, TaskType
 from torchmetrics import ConfusionMatrix
@@ -23,7 +24,7 @@ class LitLlamaLora_BinaryTask(LightningModule):
             *args,
             **kwargs,
         )
-        self.r = 16
+        self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
         self.ckpt_path = ckpt_path
@@ -101,10 +102,14 @@ class LitLlamaLora_CausalTask(LightningModule):
             *args,
             **kwargs,
         )
-        self.r = 16
+        self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
         self.ckpt_path = ckpt_path
+        self.tokenizer_path = "/data/terencewang/llama2-hf"
+        self.save_path = "work_dirs/lit_llama_lora_causal"
+        self.predict_result = []
+        self.inference_path = "work_dirs/lit_llama_lora_inference"
 
     def configure_model(self):
         if self.model_not_configured:
@@ -139,3 +144,35 @@ class LitLlamaLora_CausalTask(LightningModule):
             },
             "metric_dict": {},
         }
+
+    def on_validation_epoch_end(self, *args, **kwargs):
+        super().on_validation_epoch_end(*args, **kwargs)
+        self.model.save_pretrained(self.save_path)  # transformers save model
+
+    def predict_forward(self, batch, *args, **kwargs):
+        super().predict_forward(*args, **kwargs)
+        generation_cfg = {
+            "max_new_tokens": 3,
+            "num_return_sequences": 1,
+            "do_sample": True,
+            "temperature": 0.1,
+            "top_p": 0.75,
+            "top_k": 40,
+            "num_beams": 4,
+            "repetition_penalty": 1.05,
+        }
+        outputs = self.model.generate(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            **generation_cfg,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
+        generated_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        for i, sentence in enumerate(generated_sentence):
+            self.predict_result.append(sentence.split("### Response:")[1].strip())
+
+    def on_predict_end(self) -> None:
+        super().on_predict_end()
+        with open(os.path.join(self.inference_path, "predict_result.txt"), "w") as f:
+            for sentence in self.predict_result:
+                f.write(sentence + "\n")
