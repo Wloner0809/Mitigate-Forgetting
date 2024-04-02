@@ -5,22 +5,22 @@ trainer:
       project: UNC-Project
       entity: wloner0809
       save_dir: work_dirs
-      name: Medmcqa_lora
+      name: Medmcqa_lora_causal
       offline: false
       tags: []
   # not save ckpt here for saving disk space
-  enable_checkpointing: True
+  enable_checkpointing: false
   callbacks:
-    - class_path: lightning_template.utils.callbacks.model_checkpoint.ModelCheckpointWithLinkBest
-      init_args:
-        monitor: val/loss
-        filename: "epoch:{epoch}-val_loss:{val/loss:.4g}"
-        save_top_k: 1
-        save_last: false
-        save_best: true
-        mode: min
-        auto_insert_metric_name: false
-        save_weights_only: true
+    # - class_path: lightning_template.utils.callbacks.model_checkpoint.ModelCheckpointWithLinkBest
+    #   init_args:
+    #     monitor: val/loss
+    #     filename: "epoch:{epoch}-val_loss:{val/loss:.4g}"
+    #     save_top_k: 1
+    #     save_last: false
+    #     save_best: true
+    #     mode: min
+    #     auto_insert_metric_name: false
+    #     save_weights_only: true
     - class_path: lightning_template.utils.progress.rich_progress.RichProgressBar
       init_args:
         show_version: false
