@@ -84,7 +84,7 @@ class MedmcqaDataset(Dataset):
             )
         )
         truth = []
-        for i in range(data):
+        for i in range(len(data)):
             if data[i]["cop"] == 0:
                 truth.append("A: " + data[i]["opa"])
             elif data[i]["cop"] == 1:
