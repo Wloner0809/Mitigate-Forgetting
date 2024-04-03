@@ -59,6 +59,7 @@ class MedmcqaDataset(Dataset):
         self.tokenizer_path = "/data/terencewang/llama2-hf"
         self.length = self.SAMPLE_NUM[subset]
         self.data = self.prepare_data()
+        self.truth = self.prepare_truth()
 
     def __len__(self):
         return self.length
@@ -68,8 +69,31 @@ class MedmcqaDataset(Dataset):
             "input_ids": self.data["input_ids"][index],
             "attention_mask": self.data["attention_mask"][index],
             "labels": self.data["labels"][index],
+            "truth": self.truth[index],
             "index": index,
         }
+
+    def prepare_truth(self):
+        dataset = load_dataset(self.data_path)
+        data = dataset["train"].filter(lambda x: x["choice_type"] == "single")
+        data = data.select(
+            range(
+                self.SAMPLE_NUM["train"]
+                + self.SAMPLE_NUM["valid"]
+                + self.SAMPLE_NUM["test"]
+            )
+        )
+        truth = []
+        for i in range(data):
+            if data[i]["cop"] == 0:
+                truth.append("A: " + data[i]["opa"])
+            elif data[i]["cop"] == 1:
+                truth.append("B: " + data[i]["opb"])
+            elif data[i]["cop"] == 2:
+                truth.append("C: " + data[i]["opc"])
+            elif data[i]["cop"] == 3:
+                truth.append("D: " + data[i]["opd"])
+        return truth
 
     def prepare_data(self):
         dataset = load_dataset(self.data_path)
