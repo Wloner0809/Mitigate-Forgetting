@@ -7,6 +7,7 @@ from transformers import (
 from peft import LoraConfig, get_peft_model, TaskType
 from torchmetrics import ConfusionMatrix
 import os
+import re
 
 
 class LitLlamaLora_BinaryTask(LightningModule):
@@ -171,7 +172,13 @@ class LitLlamaLora_CausalTask(LightningModule):
         generated_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         truth = batch["truth"]
         for i, sentence in enumerate(generated_sentence):
-            self.predict_result.append(sentence.split("### Response:")[1].strip())
+            predicted = sentence.split("### Response:")[1].strip()
+            match = re.search(r"[A-D]", predicted)
+            if match:
+                predicted = match.group(0)
+            else:
+                predicted = "None"
+            self.predict_result.append(predicted)
             self.truth.append(truth[i])
 
     def on_predict_end(self) -> None:
@@ -182,3 +189,14 @@ class LitLlamaLora_CausalTask(LightningModule):
         with open(os.path.join(self.inference_path, "truth.txt"), "w") as f:
             for answer in self.truth:
                 f.write(answer + "\n")
+        total = len(self.predict_result)
+        acc = 0
+        for i in range(len(self.predict_result)):
+            match = re.search(r"[A-D]", self.truth[i])
+            if match:
+                truth = match.group(0)
+            predicted = self.predict_result[i]
+            if truth == predicted:
+                acc += 1
+        with open(os.path.join(self.inference_path, "accuracy.txt"), "w") as f:
+            f.write(f"Accuracy: {acc/total}")
