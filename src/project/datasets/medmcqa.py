@@ -50,7 +50,7 @@ class Prompter(object):
 
 class MedmcqaDataset(Dataset):
     # split the dataset into train, valid, test with ratio 8:1:1
-    SAMPLE_NUM = {"train": 30000, "valid": 2000, "test": 2000}
+    SAMPLE_NUM = {"train": 10000, "valid": 1000, "test": 1000}
 
     def __init__(self, subset) -> None:
         super().__init__()
@@ -76,13 +76,24 @@ class MedmcqaDataset(Dataset):
     def prepare_truth(self):
         dataset = load_dataset(self.data_path)
         data = dataset["train"].filter(lambda x: x["choice_type"] == "single")
-        data = data.select(
-            range(
-                self.SAMPLE_NUM["train"]
-                + self.SAMPLE_NUM["valid"]
-                + self.SAMPLE_NUM["test"]
+        if self.subset == "train":
+            data = data.select(range(self.SAMPLE_NUM["train"]))
+        elif self.subset == "valid":
+            data = data.select(
+                range(
+                    self.SAMPLE_NUM["train"],
+                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                )
             )
-        )
+        elif self.subset == "test":
+            data = data.select(
+                range(
+                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                    self.SAMPLE_NUM["train"]
+                    + self.SAMPLE_NUM["valid"]
+                    + self.SAMPLE_NUM["test"],
+                )
+            )
         truth = []
         for i in range(len(data)):
             if data[i]["cop"] == 0:
@@ -114,18 +125,30 @@ class MedmcqaDataset(Dataset):
                 "topic_name",
             ],
         )
-        all_data = train_data.select(
-            range(
-                self.SAMPLE_NUM["train"]
-                + self.SAMPLE_NUM["valid"]
-                + self.SAMPLE_NUM["test"]
+
+        if self.subset == "train":
+            all_data = train_data.select(range(self.SAMPLE_NUM["train"]))
+        elif self.subset == "valid":
+            all_data = train_data.select(
+                range(
+                    self.SAMPLE_NUM["train"],
+                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                )
             )
-        )
+        elif self.subset == "test":
+            all_data = train_data.select(
+                range(
+                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                    self.SAMPLE_NUM["train"]
+                    + self.SAMPLE_NUM["valid"]
+                    + self.SAMPLE_NUM["test"],
+                )
+            )
 
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
+        # tokenizer.padding_side = "left"
 
         all_data = all_data.map(
             lambda x: self._tokenized_prompt(tokenizer, x),
