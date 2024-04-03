@@ -109,6 +109,7 @@ class LitLlamaLora_CausalTask(LightningModule):
         self.tokenizer_path = "/data/terencewang/llama2-hf"
         self.save_path = "work_dirs/lit_llama_lora_causal"
         self.predict_result = []
+        self.truth = []
         self.inference_path = "work_dirs/lit_llama_lora_inference"
 
     def configure_model(self):
@@ -168,11 +169,16 @@ class LitLlamaLora_CausalTask(LightningModule):
         )
         tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
         generated_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        truth = batch["truth"]
         for i, sentence in enumerate(generated_sentence):
             self.predict_result.append(sentence.split("### Response:")[1].strip())
+            self.truth.append(truth[i])
 
     def on_predict_end(self) -> None:
         super().on_predict_end()
         with open(os.path.join(self.inference_path, "predict_result.txt"), "w") as f:
             for sentence in self.predict_result:
                 f.write(sentence + "\n")
+        with open(os.path.join(self.inference_path, "truth.txt"), "w") as f:
+            for answer in self.truth:
+                f.write(answer + "\n")
