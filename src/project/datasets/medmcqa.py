@@ -1,6 +1,6 @@
 from torch.utils.data import Dataset
 from datasets import load_dataset
-from transformers import AutoTokenizer
+from transformers import LlamaTokenizer
 import json
 import os.path as osp
 from typing import Union
@@ -49,8 +49,7 @@ class Prompter(object):
 
 
 class MedmcqaDataset(Dataset):
-    # split the dataset into train, valid, test with ratio 8:1:1
-    SAMPLE_NUM = {"train": 10000, "valid": 1000, "test": 1000}
+    SAMPLE_NUM = {"train": 5000, "valid": 500, "test": 500}
 
     def __init__(self, subset) -> None:
         super().__init__()
@@ -59,7 +58,6 @@ class MedmcqaDataset(Dataset):
         self.tokenizer_path = "/data/terencewang/llama2-hf"
         self.length = self.SAMPLE_NUM[subset]
         self.data = self.prepare_data()
-        self.truth = self.prepare_truth()
 
     def __len__(self):
         return self.length
@@ -69,42 +67,8 @@ class MedmcqaDataset(Dataset):
             "input_ids": self.data["input_ids"][index],
             "attention_mask": self.data["attention_mask"][index],
             "labels": self.data["labels"][index],
-            "truth": self.truth[index],
             "index": index,
         }
-
-    def prepare_truth(self):
-        dataset = load_dataset(self.data_path)
-        data = dataset["train"].filter(lambda x: x["choice_type"] == "single")
-        if self.subset == "train":
-            data = data.select(range(self.SAMPLE_NUM["train"]))
-        elif self.subset == "valid":
-            data = data.select(
-                range(
-                    self.SAMPLE_NUM["train"],
-                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
-                )
-            )
-        elif self.subset == "test":
-            data = data.select(
-                range(
-                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
-                    self.SAMPLE_NUM["train"]
-                    + self.SAMPLE_NUM["valid"]
-                    + self.SAMPLE_NUM["test"],
-                )
-            )
-        truth = []
-        for i in range(len(data)):
-            if data[i]["cop"] == 0:
-                truth.append("A: " + data[i]["opa"])
-            elif data[i]["cop"] == 1:
-                truth.append("B: " + data[i]["opb"])
-            elif data[i]["cop"] == 2:
-                truth.append("C: " + data[i]["opc"])
-            elif data[i]["cop"] == 3:
-                truth.append("D: " + data[i]["opd"])
-        return truth
 
     def prepare_data(self):
         dataset = load_dataset(self.data_path)
@@ -145,14 +109,18 @@ class MedmcqaDataset(Dataset):
                 )
             )
 
-        tokenizer = AutoTokenizer.from_pretrained(self.tokenizer_path)
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        tokenizer.pad_token = tokenizer.eos_token
-        # tokenizer.padding_side = "left"
+        # set tokenizer as follows
+        tokenizer = LlamaTokenizer.from_pretrained(self.tokenizer_path)
+        if tokenizer.pad_token_id is None:
+            tokenizer.pad_token_id = 0
+        tokenizer.pad_token = "<unk>"
+        tokenizer.padding_side = "left"
 
         all_data = all_data.map(
             lambda x: self._tokenized_prompt(tokenizer, x),
-            remove_columns=["instruction", "input", "output"],
+            # remove_columns=["instruction", "input", "output"],
+            remove_columns=["instruction", "output"],
+            # remove_columns=["instruction"],
         )
         all_data.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
         return all_data
@@ -160,11 +128,10 @@ class MedmcqaDataset(Dataset):
     def _preprocess(self, data):
         int2char = {0: "A", 1: "B", 2: "C", 3: "D"}
         data_dict = {
-            "instruction": "Answer the following medical questions by using four choices: A, B, C, D.\n",
-            "input": data["question"]
-            + "\nChoices:\n"
-            + f"A. {data['opa']}\nB. {data['opb']}\nC. {data['opc']}\nD. {data['opd']}"
-            + "\nPlease choose the correct answer.",
+            "instruction": "Solve the following medical problem by choosing the correct answer from following four choices.\nQuestion:\n"
+            + data["question"]
+            + "\nChoices: \n"
+            + f"A.{data['opa']}, B.{data['opb']}, C. {data['opc']}, D. {data['opd']}\n Answer:",
             "output": int2char[data["cop"]],
         }
         return data_dict
@@ -175,7 +142,8 @@ class MedmcqaDataset(Dataset):
                 prompt,
                 truncation=True,
                 max_length=512,
-                padding="max_length",
+                # padding="max_length",
+                padding=False,
                 return_tensors=None,
             )
             if (
@@ -191,13 +159,14 @@ class MedmcqaDataset(Dataset):
         prompter = Prompter(template_name="alpaca", verbose=False)
         full_prompt = prompter.generate_prompt(
             instruction=data["instruction"],
-            input=data["input"],
+            # input=data["input"],
             label=data["output"],  # do not need in inference stage
         )
         tokenized_full_prompt = tokenize(full_prompt)
         if not train_on_inputs:
             user_prompt = prompter.generate_prompt(
-                instruction=data["instruction"], input=data["input"]
+                # instruction=data["instruction"], input=data["input"]
+                instruction=data["instruction"]
             )
             tokenized_user_prompt = tokenize(user_prompt, add_eos_token=False)
             user_prompt_len = len(tokenized_user_prompt["input_ids"])
