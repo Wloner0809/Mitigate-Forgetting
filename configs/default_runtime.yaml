@@ -5,7 +5,7 @@ trainer:
       project: UNC-Project
       entity: wloner0809
       save_dir: work_dirs
-      name: Medmcqa_lora_causal
+      name: Medmcqa_llama_causal_lora
       offline: false
       tags: []
   # not save ckpt here for saving disk space
@@ -83,13 +83,9 @@ trainer:
   #     find_unused_parameters: false
   #     gradient_as_bucket_view: true
   precision: bf16-true
-  # plugins:
-  #   class_path: lightning.pytorch.plugins.precision.BitsandbytesPrecision
-  #   init_args:
-  #     mode: int8
 
   sync_batchnorm: false
-  accumulate_grad_batches: 1
+  accumulate_grad_batches: 4
   use_distributed_sampler: true
   deterministic: null
   benchmark: null
