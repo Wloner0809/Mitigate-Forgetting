@@ -1,4 +1,5 @@
 import re
+import json
 
 
 def preprocess(sentence):
@@ -23,15 +24,11 @@ def evaluate_medmcqa(output, ground_truth):
 
 if __name__ == "__main__":
     with open(
-        "/home/terencewang/UNC-Project/work_dirs/lit_llama_lora_inference/predict_result.txt",
-        "r",
+        "work_dirs/lit_llama_lora_inference/medmcqa.json", "r", encoding="utf-8"
     ) as f:
-        output = f.readlines()
-    output = [x.strip() for x in output]
-    with open(
-        "/home/terencewang/UNC-Project/work_dirs/lit_llama_lora_inference/truth.txt",
-        "r",
-    ) as f:
-        ground_truth = f.readlines()
-    ground_truth = [x.strip() for x in ground_truth]
-    print(evaluate_medmcqa(output, ground_truth))
+        result = json.load(f)
+    answer = result["answer"]
+    output = result["output"]
+    accuracy = evaluate_medmcqa(output, answer)
+    print(f"Accuracy: {accuracy}")
+    
