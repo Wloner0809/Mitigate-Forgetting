@@ -5,8 +5,6 @@ from transformers import (
     LlamaTokenizer,
 )
 from peft import LoraConfig, get_peft_model, TaskType
-
-from peft import PeftModel
 from torchmetrics import ConfusionMatrix
 import os
 import re
@@ -29,7 +27,7 @@ class LitLlamaLora_CausalTask(LightningModule):
         self.ckpt_path = ckpt_path
         self.tokenizer_path = "/data/terencewang/llama2-hf"
         self.save_path = "work_dirs/lit_llama_lora_causal"
-        self.lora_path = "work_dirs/llama_causal"
+        # self.lora_path = "work_dirs/llama_causal"
         self.inference_path = "work_dirs/lit_llama_lora_inference"
         self.predict_result = []
 

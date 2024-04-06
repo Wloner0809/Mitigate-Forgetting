@@ -12,7 +12,6 @@ class Prompter(object):
     def __init__(self, template_name: str = "", verbose: bool = False):
         self._verbose = verbose
         if not template_name:
-            # Enforce the default here, so the constructor can be called with '' and will not break.
             template_name = "alpaca"
         file_name = osp.join("src/project/datasets/", f"{template_name}.json")
         if not osp.exists(file_name):
@@ -30,8 +29,6 @@ class Prompter(object):
         input: Union[None, str] = None,
         label: Union[None, str] = None,
     ) -> str:
-        # returns the full prompt from instruction and optional input
-        # if a label (=response, =output) is provided, it's also appended.
         if input:
             res = self.template["prompt_input"].format(
                 instruction=instruction, input=input
@@ -118,9 +115,7 @@ class MedmcqaDataset(Dataset):
 
         all_data = all_data.map(
             lambda x: self._tokenized_prompt(tokenizer, x),
-            # remove_columns=["instruction", "input", "output"],
             remove_columns=["instruction", "output"],
-            # remove_columns=["instruction"],
         )
         all_data.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
         return all_data
@@ -142,7 +137,6 @@ class MedmcqaDataset(Dataset):
                 prompt,
                 truncation=True,
                 max_length=512,
-                # padding="max_length",
                 padding=False,
                 return_tensors=None,
             )
@@ -159,15 +153,11 @@ class MedmcqaDataset(Dataset):
         prompter = Prompter(template_name="alpaca", verbose=False)
         full_prompt = prompter.generate_prompt(
             instruction=data["instruction"],
-            # input=data["input"],
-            label=data["output"],  # do not need in inference stage
+            label=data["output"],
         )
         tokenized_full_prompt = tokenize(full_prompt)
         if not train_on_inputs:
-            user_prompt = prompter.generate_prompt(
-                # instruction=data["instruction"], input=data["input"]
-                instruction=data["instruction"]
-            )
+            user_prompt = prompter.generate_prompt(instruction=data["instruction"])
             tokenized_user_prompt = tokenize(user_prompt, add_eos_token=False)
             user_prompt_len = len(tokenized_user_prompt["input_ids"])
             tokenized_full_prompt["labels"] = [

@@ -11,16 +11,6 @@ trainer:
   # not save ckpt here for saving disk space
   enable_checkpointing: false
   callbacks:
-    # - class_path: lightning_template.utils.callbacks.model_checkpoint.ModelCheckpointWithLinkBest
-    #   init_args:
-    #     monitor: val/loss
-    #     filename: "epoch:{epoch}-val_loss:{val/loss:.4g}"
-    #     save_top_k: 1
-    #     save_last: false
-    #     save_best: true
-    #     mode: min
-    #     auto_insert_metric_name: false
-    #     save_weights_only: true
     - class_path: lightning_template.utils.progress.rich_progress.RichProgressBar
       init_args:
         show_version: false
@@ -60,32 +50,14 @@ trainer:
   num_sanity_val_steps: null
   barebones: false
   detect_anomaly: false
-  # fast_dev_run: 5
-  # profiler:
-  #   class_path: lightning.pytorch.profilers.PyTorchProfiler
-  #   init_args:
-  #     dirpath: profile
-  #     filename: pytorch_profiler
-  #   dict_kwargs:
-  #     use_cuda: true
-  #     record_shapes: true
-  #     profile_memory: true
-  #     with_flops: true
-  #     with_modules: true
-  #     # with_stack: true
   # speed up
   num_nodes: 1
   accelerator: auto
   devices: auto
-  # strategy:
-  #   class_path: lightning.pytorch.strategies.DDPStrategy
-  #   init_args:
-  #     find_unused_parameters: false
-  #     gradient_as_bucket_view: true
   precision: bf16-true
 
   sync_batchnorm: false
-  accumulate_grad_batches: 4
+  accumulate_grad_batches: 1
   use_distributed_sampler: true
   deterministic: null
   benchmark: null
