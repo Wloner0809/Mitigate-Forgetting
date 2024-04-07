@@ -30,5 +30,14 @@ if __name__ == "__main__":
     answer = result["answer"]
     output = result["output"]
     accuracy = evaluate_medmcqa(output, answer)
-    print(f"Accuracy: {accuracy}")
-    
+    print(f"LoRA finetuned Accuracy: {accuracy}")
+    with open(
+        "work_dirs/lit_llama_lora_inference/medmcqa_baseline.json",
+        "r",
+        encoding="utf-8",
+    ) as f:
+        result = json.load(f)
+    answer = result["answer"]
+    output = result["output"]
+    accuracy = evaluate_medmcqa(output, answer)
+    print(f"Baseline Accuracy: {accuracy}")

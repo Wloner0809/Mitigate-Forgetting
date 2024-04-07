@@ -69,8 +69,11 @@ def main(
     model_path: str = "/data/terencewang/llama2-hf",
     output_dir: str = "work_dirs/lit_llama_lora_inference",
     lora_dir: str = "work_dirs/lit_llama_lora_causal",
-    dataset_path: str = "/data/terencewang/medmcqa_json",
-    dateset_name: str = "medmcqa",
+    # lora_dir: str = "",
+    # dataset_path: str = "/data/terencewang/medmcqa_json",
+    dataset_path: str = "/data/terencewang/truthful_qa/generation",
+    # dataset_name: str = "medmcqa",
+    dataset_name: str = "truthful_qa",
     number_of_samples: int = 500,
 ):
     def get_configs():
@@ -95,48 +98,72 @@ def main(
         prompt_config = Prompter("alpaca")
         return generation_cfg, inference_cfg, bnb_config, prompt_config
 
-    def medmcqa_preprocess(data):
-        int2char = {1: "A", 2: "B", 3: "C", 4: "D"}
-        data_dict = {
-            "instruction": "Solve the following medical problem by choosing the correct answer from following four choices.\nQuestion:\n"
-            + data["question"]
-            + "\nChoices: \n"
-            + f"A.{data['opa']}, B.{data['opb']}, C.{data['opc']}, D.{data['opd']}\n Answer:",
-            "answer": f"{int2char[data['cop']]}",
-        }
-        return data_dict
+    def preprocess(data, dataset_name):
+        if dataset_name == "medmcqa":
+            int2char = {1: "A", 2: "B", 3: "C", 4: "D"}
+            data_dict = {
+                "instruction": "Solve the following medical problem by choosing the correct answer from following four choices.\nQuestion:\n"
+                + data["question"]
+                + "\nChoices: \n"
+                + f"A.{data['opa']}, B.{data['opb']}, C.{data['opc']}, D.{data['opd']}\n Answer:",
+                "answer": f"{int2char[data['cop']]}",
+            }
+            return data_dict
+        elif dataset_name == "truthful_qa":
+            return {
+                "instruction": "Solve the following problem by generating a truthful answer.\n Question:\n"
+                + data["question"]
+                + "\nBest Answer:",
+                "answer": data["best_answer"],
+                "incorrect": data["incorrect_answers"],
+                "correct": data["correct_answers"],
+            }
 
-    def create_test_dataset(dataset_path: str, number_of_samples: int = 500):
-        num_samples = number_of_samples
-        medmcqa_path = dataset_path
-        data = load_dataset(
-            "json",
-            data_files=os.path.join(medmcqa_path, "dev.json"),
-            split="train",
-        ).filter(lambda x: x["choice_type"] == "single")
-        len_of_data = len(data)
-        select_range = range(len_of_data - min(num_samples, len_of_data), len_of_data)
-        data = data.select(select_range)
-        data = (
-            data.map(medmcqa_preprocess)
-            .remove_columns(
-                [
-                    "question",
-                    "exp",
-                    "cop",
-                    "opa",
-                    "opb",
-                    "opc",
-                    "opd",
-                    "subject_name",
-                    "topic_name",
-                    "id",
-                    "choice_type",
-                ]
+    def create_test_dataset(
+        dataset_path: str, dataset_name: str, number_of_samples: int = 500
+    ):
+        if dataset_name == "medmcqa":
+            data = load_dataset(
+                "json",
+                data_files=os.path.join(dataset_path, "dev.json"),
+                split="train",
+            ).filter(lambda x: x["choice_type"] == "single")
+            len_of_data = len(data)
+            select_range = range(
+                len_of_data - min(number_of_samples, len_of_data), len_of_data
             )
-            .shuffle()
-        )
-        return data
+            data = data.select(select_range)
+            data = (
+                data.map(preprocess, dataset_name)
+                .remove_columns(
+                    [
+                        "question",
+                        "exp",
+                        "cop",
+                        "opa",
+                        "opb",
+                        "opc",
+                        "opd",
+                        "subject_name",
+                        "topic_name",
+                        "id",
+                        "choice_type",
+                    ]
+                )
+                .shuffle()
+            )
+            return data
+        elif dataset_name == "truthful_qa":
+            dataset = load_dataset(dataset_path, split="validation")
+            len_of_data = len(dataset)
+            select_range = range(
+                len_of_data - min(number_of_samples, len_of_data), len_of_data
+            )
+            dataset = dataset.select(select_range)
+            columns = dataset.column_names
+            dataset = dataset.map(lambda x: preprocess(x, dataset_name))
+            dataset = dataset.remove_columns(columns)
+            return dataset
 
     def get_model(model_path, lora_dir, bnb_config, accelerator):
         with accelerator.main_process_first():
@@ -233,7 +260,7 @@ def main(
     logger.info("Loading tokenizer")
     tokenizer = get_tokenizer(model_path)
     logger.info("Loading datasets")
-    test_dataset = create_test_dataset(dataset_path, number_of_samples)
+    test_dataset = create_test_dataset(dataset_path, dataset_name, number_of_samples)
     logger.info("Loading model")
     model = get_model(model_path, lora_dir, bnb_config, accelerator)
     logger.info("starting inference")
@@ -250,20 +277,46 @@ def main(
     )
     if accelerator.is_local_main_process:
         logger.info("Saving results")
-        instruction = [p["instruction"] for p in test_dataset]
-        answer = [p["answer"] for p in test_dataset]
-        output = output_sequences
-        with open(
-            os.path.join(output_dir, f"{dateset_name}.json"),
-            "w",
-            encoding="utf-8",
-        ) as f:
-            json.dump(
-                {"instruction": instruction, "answer": answer, "output": output},
-                f,
-                ensure_ascii=False,
-                indent=4,
-            )
+        if dataset_name == "medmcqa":
+            instruction = [p["instruction"] for p in test_dataset]
+            answer = [p["answer"] for p in test_dataset]
+            output = output_sequences
+            with open(
+                os.path.join(output_dir, f"{dataset_name}.json"),
+                # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    {"instruction": instruction, "answer": answer, "output": output},
+                    f,
+                    ensure_ascii=False,
+                    indent=4,
+                )
+        elif dataset_name == "truthful_qa":
+            instruction = [p["instruction"] for p in test_dataset]
+            answer = [p["answer"] for p in test_dataset]
+            correct = [p["correct"] for p in test_dataset]
+            incorrect = [p["incorrect"] for p in test_dataset]
+            output = output_sequences
+            with open(
+                os.path.join(output_dir, f"{dataset_name}.json"),
+                # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    {
+                        "instruction": instruction,
+                        "answer": answer,
+                        "output": output,
+                        "correct": correct,
+                        "incorrect": incorrect,
+                    },
+                    f,
+                    ensure_ascii=False,
+                    indent=4,
+                )
 
 
 if __name__ == "__main__":
