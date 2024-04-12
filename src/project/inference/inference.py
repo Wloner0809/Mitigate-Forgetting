@@ -68,7 +68,7 @@ class Prompter(object):
 def main(
     model_path: str = "/data/terencewang/llama2-hf",
     output_dir: str = "work_dirs/lit_llama_lora_inference",
-    lora_dir: str = "work_dirs/lit_llama_lora_causal",
+    lora_dir: str = "work_dirs/lit_llama_freeze",
     # lora_dir: str = "",
     # dataset_path: str = "/data/terencewang/medmcqa_json",
     dataset_path: str = "/data/terencewang/truthful_qa/generation",
@@ -134,7 +134,7 @@ def main(
             )
             data = data.select(select_range)
             data = (
-                data.map(preprocess, dataset_name)
+                data.map(lambda x: preprocess(x, dataset_name))
                 .remove_columns(
                     [
                         "question",
@@ -282,7 +282,7 @@ def main(
             answer = [p["answer"] for p in test_dataset]
             output = output_sequences
             with open(
-                os.path.join(output_dir, f"{dataset_name}.json"),
+                os.path.join(output_dir, f"{dataset_name}_freeze.json"),
                 # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
                 "w",
                 encoding="utf-8",
@@ -300,7 +300,7 @@ def main(
             incorrect = [p["incorrect"] for p in test_dataset]
             output = output_sequences
             with open(
-                os.path.join(output_dir, f"{dataset_name}.json"),
+                os.path.join(output_dir, f"{dataset_name}_freeze.json"),
                 # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
                 "w",
                 encoding="utf-8",
