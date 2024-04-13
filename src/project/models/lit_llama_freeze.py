@@ -18,15 +18,14 @@ class LitLlamaFreeze(LightningModule):
             **kwargs,
         )
         self.ckpt_path = ckpt_path
+        self.tokenizer_path = ckpt_path
+        self.save_path = "work_dirs/lit_llama_freeze"
+        self.gradient_path = "work_dirs/lit_llama_gradient/lit_llama_gradient.txt"
         self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
-        self.tokenizer_path = "/data/terencewang/llama2-hf"
-        self.save_path = "work_dirs/lit_llama_freeze"
-        self.gradient_path = "work_dirs/lit_llama_gradient/lit_llama_gradient.txt"
-        self.param_path = "work_dirs/lit_llama_gradient/lit_llama_param.txt"
         self.automatic_optimization = False
-        self.freeze_ratio = 0.6
+        self.freeze_ratio = 0.5
         self.freeze_idx: Dict[str, torch.Tensor] = {}
         self.freeze_name: List[str] = []
 
@@ -69,6 +68,7 @@ class LitLlamaFreeze(LightningModule):
                         self.freeze_idx[modified_name] = l1_norm
                 with open(self.gradient_path, "w") as f:
                     f.write(str(self.freeze_idx) + "\n")
+            self.log("loss_freeze", outputs.loss)
         else:
             outputs = self.model(
                 input_ids=batch["input_ids"],
@@ -92,16 +92,7 @@ class LitLlamaFreeze(LightningModule):
             loss = outputs.loss
             self.manual_backward(loss)
             optimizer.step()
-
-    def on_train_epoch_end(self, *args, **kwargs):
-        lr_scheduler = self.lr_schedulers()
-        lr_scheduler.step()
-        self.model.print_trainable_parameters()
-        for name, param in self.model.named_parameters():
-            if param.requires_grad:
-                with open(self.param_path, "a") as f:
-                    f.write(name + "\n")
-                    f.write(str(param) + "\n")
+            self.log("loss_freeze", outputs.loss)
 
     def forward(self, batch, *args, **kwargs):
         outputs = self.model(
@@ -119,7 +110,9 @@ class LitLlamaFreeze(LightningModule):
 
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
-        # transformers save model
+        lr_scheduler = self.lr_schedulers()
+        lr_scheduler.step()
+        self.model.print_trainable_parameters()
         self.model.save_pretrained(self.save_path)
 
 
@@ -135,11 +128,11 @@ class LitLlamaFreeze_Baseline(LightningModule):
             **kwargs,
         )
         self.ckpt_path = ckpt_path
+        self.tokenizer_path = ckpt_path
+        self.save_path = "work_dirs/lit_llama_freeze"
         self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
-        self.tokenizer_path = "/data/terencewang/llama2-hf"
-        self.save_path = "work_dirs/lit_llama_freeze"
         self.automatic_optimization = False
         self.freeze_ratio = 0.6
         self.freeze_idx: Dict[str, torch.Tensor] = {}
@@ -189,6 +182,7 @@ class LitLlamaFreeze_Baseline(LightningModule):
                         )
                         modified_name = name.replace(".", "_")
                         self.freeze_idx[modified_name] = idx
+            self.log("loss_freeze", outputs.loss)
         else:
             outputs = self.model(
                 input_ids=batch["input_ids"],
@@ -207,10 +201,7 @@ class LitLlamaFreeze_Baseline(LightningModule):
                         self.freeze_idx[modified_name][1],
                     ] = 0
             optimizer.step()
-
-    def on_train_epoch_end(self, *args, **kwargs):
-        lr_scheduler = self.lr_schedulers()
-        lr_scheduler.step()
+            self.log("loss_freeze", outputs.loss)
 
     def forward(self, batch, *args, **kwargs):
         outputs = self.model(
@@ -228,5 +219,6 @@ class LitLlamaFreeze_Baseline(LightningModule):
 
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
-        # transformers save model
+        lr_scheduler = self.lr_schedulers()
+        lr_scheduler.step()
         self.model.save_pretrained(self.save_path)
