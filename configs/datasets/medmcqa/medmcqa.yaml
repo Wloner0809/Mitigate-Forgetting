@@ -22,10 +22,10 @@ data:
       pin_memory: true
       collate_fn:
         class_path: transformers.DataCollatorForSeq2Seq
-        init_args: 
+        init_args:
           tokenizer:
             class_path: transformers.LlamaTokenizer
-            init_args: 
+            init_args:
               vocab_file: "/data/terencewang/llama2-hf/tokenizer.model"
               pad_token: "<unk>"
               pad_token_id: 0
