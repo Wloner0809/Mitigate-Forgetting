@@ -1,9 +1,11 @@
 from lightning_template import LightningModule
 from transformers import LlamaForCausalLM
-from peft import LoraConfig, get_peft_model, TaskType
 import torch
 import numpy as np
 from typing import Dict, List
+import json
+import matplotlib.pyplot as plt
+import os
 
 
 class LitLlamaFreeze(LightningModule):
@@ -19,32 +21,23 @@ class LitLlamaFreeze(LightningModule):
         )
         self.ckpt_path = ckpt_path
         self.tokenizer_path = ckpt_path
-        self.save_path = "work_dirs/lit_llama_freeze"
-        self.gradient_path = "work_dirs/lit_llama_gradient/lit_llama_gradient.txt"
-        self.r = 8
-        self.lora_alpha = 16
-        self.lora_dropout = 0.05
+        # self.save_path = "work_dirs/lit_llama_freeze"
+        self.save_path = "/data1/terencewang/lit_llama_freeze"
+        self.gradient_norm_path = (
+            "work_dirs/lit_llama_gradient/lit_llama_gradient_norm.txt"
+        )
+        self.gradient_path = "work_dirs/lit_llama_gradient/lit_llama_gradient.json"
+        self.pic_path = "work_dirs/lit_llama_gradient/"
         self.automatic_optimization = False
-        self.freeze_ratio = 0.5
+        self.freeze_ratio = 0.98
         self.freeze_idx: Dict[str, torch.Tensor] = {}
+        self.grad_save: Dict[str, torch.Tensor] = {}
         self.freeze_name: List[str] = []
 
     def configure_model(self):
         self.model = LlamaForCausalLM.from_pretrained(
             pretrained_model_name_or_path=self.ckpt_path,
         )
-        config = LoraConfig(
-            r=self.r,
-            lora_alpha=self.lora_alpha,
-            lora_dropout=self.lora_dropout,
-            target_modules=[
-                "q_proj",
-                "v_proj",
-            ],
-            bias="none",
-            task_type=TaskType.CAUSAL_LM,
-        )
-        self.model = get_peft_model(self.model, config)
         self.model.config.pad_token_id = 0
         self.model.config.bos_token_id = 1
         self.model.config.eos_token_id = 2
@@ -58,6 +51,20 @@ class LitLlamaFreeze(LightningModule):
                 attention_mask=batch["attention_mask"],
                 labels=batch["labels"],
             )
+
+            # # prevent gradient explosion if needed
+            # def hook(grad):
+            #     l2norm = torch.norm(grad, p=2)
+            #     maxnorm = 50000
+            #     if l2norm > maxnorm:
+            #         return grad * (maxnorm / l2norm)
+            #     else:
+            #         return grad
+
+            # for name, param in self.model.named_parameters():
+            #     if param.requires_grad:
+            #         param.register_hook(hook)
+
             loss = outputs.loss
             self.manual_backward(loss)
             if self.trainer.is_last_batch:
@@ -66,8 +73,8 @@ class LitLlamaFreeze(LightningModule):
                         l1_norm = torch.norm(param.grad, p=1)
                         modified_name = name.replace(".", "_")
                         self.freeze_idx[modified_name] = l1_norm
-                with open(self.gradient_path, "w") as f:
-                    f.write(str(self.freeze_idx) + "\n")
+                with open(self.gradient_norm_path, "w") as f:
+                    f.write(str(self.freeze_idx))
             self.log("loss_freeze", outputs.loss)
         else:
             outputs = self.model(
@@ -108,11 +115,48 @@ class LitLlamaFreeze(LightningModule):
             "metric_dict": {},
         }
 
+    def on_train_batch_end(self, outputs, batch, batch_idx):
+        super().on_train_batch_end(outputs, batch, batch_idx)
+        # record log gradient
+        if self.current_epoch == 0:
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    modified_name = name.replace(".", "_")
+                    self.grad_save[modified_name] = (
+                        abs(torch.log2(abs(param.grad))).cpu().detach().numpy().tolist()
+                    )
+            with open(self.gradient_path, "w", encoding="utf-8") as f:
+                json.dump(self.grad_save, f, indent=2)
+            for name, param in self.model.named_parameters():
+                if param.requires_grad:
+                    modified_name = name.replace(".", "_")
+                    list_all = []
+                    for single_list in self.grad_save[modified_name]:
+                        list_all.extend(single_list)
+                    plt.hist(
+                        list_all, bins=100, range=(-75, 25), color="#f9766e", alpha=0.8
+                    )
+                    plt.title(
+                        f"{modified_name} gradient distribution",
+                        loc="center",
+                        fontweight="bold",
+                    )
+                    plt.xlabel("log2(gradient)", loc="center", fontweight="bold")
+                    plt.ylabel("Frequency", loc="center", fontweight="bold")
+                    plt.gca().spines["top"].set_visible(False)
+                    plt.gca().spines["right"].set_visible(False)
+                    plt.gca().spines["left"].set_linestyle("-")
+                    plt.gca().spines["left"].set_linewidth(2.5)
+                    plt.gca().spines["bottom"].set_linestyle("-")
+                    plt.gca().spines["bottom"].set_linewidth(2.5)
+                    plt.tight_layout()
+                    plt.savefig(os.path.join(self.pic_path, f"{modified_name}.png"))
+                    plt.clf()
+
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
         lr_scheduler = self.lr_schedulers()
         lr_scheduler.step()
-        self.model.print_trainable_parameters()
         self.model.save_pretrained(self.save_path)
 
 
@@ -130,29 +174,14 @@ class LitLlamaFreeze_Baseline(LightningModule):
         self.ckpt_path = ckpt_path
         self.tokenizer_path = ckpt_path
         self.save_path = "work_dirs/lit_llama_freeze"
-        self.r = 8
-        self.lora_alpha = 16
-        self.lora_dropout = 0.05
         self.automatic_optimization = False
-        self.freeze_ratio = 0.6
+        self.freeze_ratio = 0.98
         self.freeze_idx: Dict[str, torch.Tensor] = {}
 
     def configure_model(self):
         self.model = LlamaForCausalLM.from_pretrained(
             pretrained_model_name_or_path=self.ckpt_path,
         )
-        config = LoraConfig(
-            r=self.r,
-            lora_alpha=self.lora_alpha,
-            lora_dropout=self.lora_dropout,
-            target_modules=[
-                "q_proj",
-                "v_proj",
-            ],
-            bias="none",
-            task_type=TaskType.CAUSAL_LM,
-        )
-        self.model = get_peft_model(self.model, config)
         self.model.config.pad_token_id = 0
         self.model.config.bos_token_id = 1
         self.model.config.eos_token_id = 2
