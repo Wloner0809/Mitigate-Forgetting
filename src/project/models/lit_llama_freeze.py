@@ -3,9 +3,9 @@ from transformers import LlamaForCausalLM
 import torch
 import numpy as np
 from typing import Dict, List
-import json
-import matplotlib.pyplot as plt
-import os
+import wandb
+# import matplotlib.pyplot as plt
+# import os
 
 
 class LitLlamaFreeze(LightningModule):
@@ -26,10 +26,10 @@ class LitLlamaFreeze(LightningModule):
         self.gradient_norm_path = (
             "work_dirs/lit_llama_gradient/lit_llama_gradient_norm.txt"
         )
-        self.gradient_path = "work_dirs/lit_llama_gradient/lit_llama_gradient.json"
-        self.pic_path = "work_dirs/lit_llama_gradient/"
+        # self.pic_path = "work_dirs/lit_llama_gradient/"
         self.automatic_optimization = False
-        self.freeze_ratio = 0.98
+        self.freeze_ratio = 0.96
+        self.freeze_layer_num = 31
         self.freeze_idx: Dict[str, torch.Tensor] = {}
         self.grad_save: Dict[str, torch.Tensor] = {}
         self.freeze_name: List[str] = []
@@ -38,6 +38,18 @@ class LitLlamaFreeze(LightningModule):
         self.model = LlamaForCausalLM.from_pretrained(
             pretrained_model_name_or_path=self.ckpt_path,
         )
+        # freeze some layers due to memory limitation
+        for param in self.model.parameters():
+            param.requires_grad = False
+        for param in self.model.lm_head.parameters():
+            param.requires_grad = True
+        for name, param in self.model.model.layers[
+            self.freeze_layer_num :
+        ].named_parameters():
+            if "mlp" in name:
+                param.requires_grad = False
+            else:
+                param.requires_grad = True
         self.model.config.pad_token_id = 0
         self.model.config.bos_token_id = 1
         self.model.config.eos_token_id = 2
@@ -117,41 +129,49 @@ class LitLlamaFreeze(LightningModule):
 
     def on_train_batch_end(self, outputs, batch, batch_idx):
         super().on_train_batch_end(outputs, batch, batch_idx)
-        # record log gradient
+        # record log gradient and plot histogram
         if self.current_epoch == 0:
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
                     modified_name = name.replace(".", "_")
+                    # NOTE: log gradient may not work
                     self.grad_save[modified_name] = (
-                        abs(torch.log2(abs(param.grad))).cpu().detach().numpy().tolist()
+                        # torch.log2(abs(param.grad)).view(-1).tolist()
+                        abs(param.grad).view(-1).tolist()
                     )
-            with open(self.gradient_path, "w", encoding="utf-8") as f:
-                json.dump(self.grad_save, f, indent=2)
-            for name, param in self.model.named_parameters():
-                if param.requires_grad:
-                    modified_name = name.replace(".", "_")
-                    list_all = []
-                    for single_list in self.grad_save[modified_name]:
-                        list_all.extend(single_list)
-                    plt.hist(
-                        list_all, bins=100, range=(-75, 25), color="#f9766e", alpha=0.8
+                    wandb.log(
+                        {
+                            f"grad_{modified_name}": wandb.Histogram(
+                                np_histogram=np.histogram(
+                                    self.grad_save[modified_name],
+                                )
+                            )
+                        }
                     )
-                    plt.title(
-                        f"{modified_name} gradient distribution",
-                        loc="center",
-                        fontweight="bold",
-                    )
-                    plt.xlabel("log2(gradient)", loc="center", fontweight="bold")
-                    plt.ylabel("Frequency", loc="center", fontweight="bold")
-                    plt.gca().spines["top"].set_visible(False)
-                    plt.gca().spines["right"].set_visible(False)
-                    plt.gca().spines["left"].set_linestyle("-")
-                    plt.gca().spines["left"].set_linewidth(2.5)
-                    plt.gca().spines["bottom"].set_linestyle("-")
-                    plt.gca().spines["bottom"].set_linewidth(2.5)
-                    plt.tight_layout()
-                    plt.savefig(os.path.join(self.pic_path, f"{modified_name}.png"))
-                    plt.clf()
+                    # plt.hist(
+                    #     self.grad_save[modified_name],
+                    #     bins=20,
+                    #     color="#f9766e",
+                    #     alpha=0.8,
+                    # )
+                    # plt.title(
+                    #     f"{modified_name}",
+                    #     loc="center",
+                    #     fontweight="bold",
+                    # )
+                    # plt.xlabel("abs(gradient)", loc="center", fontweight="bold")
+                    # plt.ylabel("Frequency", loc="center", fontweight="bold")
+                    # plt.gca().spines["top"].set_visible(False)
+                    # plt.gca().spines["right"].set_visible(False)
+                    # plt.gca().spines["left"].set_linestyle("-")
+                    # plt.gca().spines["left"].set_linewidth(2.5)
+                    # plt.gca().spines["bottom"].set_linestyle("-")
+                    # plt.gca().spines["bottom"].set_linewidth(2.5)
+                    # plt.tight_layout()
+                    # plt.savefig(os.path.join(self.pic_path, f"{modified_name}.png"))
+                    # plt.cla()
+                    # plt.clf()
+                    # plt.close("all")
 
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
