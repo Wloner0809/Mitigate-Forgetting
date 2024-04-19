@@ -3,9 +3,10 @@ from transformers import LlamaForCausalLM
 import torch
 import numpy as np
 from typing import Dict, List
-import wandb
-# import matplotlib.pyplot as plt
-# import os
+
+# import wandb
+import matplotlib.pyplot as plt
+import os
 
 
 class LitLlamaFreeze(LightningModule):
@@ -32,6 +33,8 @@ class LitLlamaFreeze(LightningModule):
         self.freeze_layer_num = 31
         self.freeze_idx: Dict[str, torch.Tensor] = {}
         self.grad_save: Dict[str, torch.Tensor] = {}
+        self.grad_before_backward: Dict[str, torch.Tensor] = {}
+        self.grad_after_backward: Dict[str, torch.Tensor] = {}
         self.freeze_name: List[str] = []
 
     def configure_model(self):
@@ -77,8 +80,42 @@ class LitLlamaFreeze(LightningModule):
             #     if param.requires_grad:
             #         param.register_hook(hook)
 
+            if batch_idx % 64 == 1:
+                for name, param in self.model.named_parameters():
+                    if param.requires_grad:
+                        modified_name = name.replace(".", "_")
+                        self.grad_before_backward[modified_name] = param.grad
+                self.model.zero_grad()
+
             loss = outputs.loss
             self.manual_backward(loss)
+
+            if batch_idx % 64 == 1:
+                for name, param in self.model.named_parameters():
+                    if param.requires_grad:
+                        modified_name = name.replace(".", "_")
+                        self.grad_after_backward[modified_name] = param.grad
+                tensor_before = torch.cat(
+                    [abs(v.view(-1)) for v in self.grad_before_backward.values()]
+                )
+                tensor_after = torch.cat(
+                    [abs(v.view(-1)) for v in self.grad_after_backward.values()]
+                )
+                self.log(
+                    "error_ratio",
+                    sum((tensor_before / 128) > tensor_after).item()
+                    / tensor_before.size(0),
+                )
+                for name, param in self.model.named_parameters():
+                    if param.requires_grad:
+                        modified_name = name.replace(".", "_")
+                        param.grad = (
+                            self.grad_before_backward[modified_name]
+                            + self.grad_after_backward[modified_name]
+                        )
+                del tensor_before, tensor_after
+                torch.cuda.empty_cache()
+
             if self.trainer.is_last_batch:
                 for name, param in self.model.named_parameters():
                     if param.requires_grad:
@@ -134,44 +171,47 @@ class LitLlamaFreeze(LightningModule):
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
                     modified_name = name.replace(".", "_")
-                    # NOTE: log gradient may not work
                     self.grad_save[modified_name] = (
-                        # torch.log2(abs(param.grad)).view(-1).tolist()
-                        abs(param.grad).view(-1).tolist()
+                        torch.log2(abs(param.grad)).view(-1)
+                        # abs(param.grad).view(-1).tolist()
                     )
-                    wandb.log(
-                        {
-                            f"grad_{modified_name}": wandb.Histogram(
-                                np_histogram=np.histogram(
-                                    self.grad_save[modified_name],
-                                )
-                            )
-                        }
-                    )
-                    # plt.hist(
-                    #     self.grad_save[modified_name],
-                    #     bins=20,
-                    #     color="#f9766e",
-                    #     alpha=0.8,
-                    # )
-                    # plt.title(
-                    #     f"{modified_name}",
-                    #     loc="center",
-                    #     fontweight="bold",
-                    # )
-                    # plt.xlabel("abs(gradient)", loc="center", fontweight="bold")
-                    # plt.ylabel("Frequency", loc="center", fontweight="bold")
-                    # plt.gca().spines["top"].set_visible(False)
-                    # plt.gca().spines["right"].set_visible(False)
-                    # plt.gca().spines["left"].set_linestyle("-")
-                    # plt.gca().spines["left"].set_linewidth(2.5)
-                    # plt.gca().spines["bottom"].set_linestyle("-")
-                    # plt.gca().spines["bottom"].set_linewidth(2.5)
-                    # plt.tight_layout()
-                    # plt.savefig(os.path.join(self.pic_path, f"{modified_name}.png"))
-                    # plt.cla()
-                    # plt.clf()
-                    # plt.close("all")
+            tensor_all = torch.cat([v for v in self.grad_save.values()])
+            list_all = tensor_all.tolist()
+            # wandb.log(
+            #     {
+            #         f"grad_{modified_name}": wandb.Histogram(
+            #             np_histogram=np.histogram(
+            #                 self.grad_save[modified_name],
+            #             )
+            #         )
+            #     }
+            # )
+            if batch_idx % 64 == 0:
+                plt.hist(
+                    list_all,
+                    bins=100,
+                    range=(-65, 35),
+                    color="#f9766e",
+                    alpha=0.8,
+                )
+                plt.title(
+                    f"{modified_name}",
+                    loc="center",
+                    fontweight="bold",
+                )
+                plt.xlabel("abs(gradient)", loc="center", fontweight="bold")
+                plt.ylabel("Frequency", loc="center", fontweight="bold")
+                plt.gca().spines["top"].set_visible(False)
+                plt.gca().spines["right"].set_visible(False)
+                plt.gca().spines["left"].set_linestyle("-")
+                plt.gca().spines["left"].set_linewidth(2.5)
+                plt.gca().spines["bottom"].set_linestyle("-")
+                plt.gca().spines["bottom"].set_linewidth(2.5)
+                plt.tight_layout()
+                plt.savefig(os.path.join(self.pic_path, f"{batch_idx}.png"))
+                plt.cla()
+                plt.clf()
+                plt.close("all")
 
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
