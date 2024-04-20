@@ -80,6 +80,10 @@ class LitLlamaFreeze(LightningModule):
             #     if param.requires_grad:
             #         param.register_hook(hook)
 
+            for param in self.model.parameters():
+                if param.requires_grad and param.grad is not None:
+                    param.grad = param.grad * batch_idx / (batch_idx + 1)
+
             if batch_idx % 64 == 1:
                 for name, param in self.model.named_parameters():
                     if param.requires_grad:
@@ -88,7 +92,7 @@ class LitLlamaFreeze(LightningModule):
                 self.model.zero_grad()
 
             loss = outputs.loss
-            self.manual_backward(loss)
+            self.manual_backward(loss / (batch_idx + 1))
 
             if batch_idx % 64 == 1:
                 for name, param in self.model.named_parameters():
