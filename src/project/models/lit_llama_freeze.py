@@ -36,6 +36,9 @@ class LitLlamaFreeze(LightningModule):
         self.grad_before_backward: Dict[str, torch.Tensor] = {}
         self.grad_after_backward: Dict[str, torch.Tensor] = {}
         self.freeze_name: List[str] = []
+        # precision setting
+        torch.backends.cudnn.allow_tf32 = True
+        torch.backends.cuda.matmul.allow_tf32 = True
 
     def configure_model(self):
         self.model = LlamaForCausalLM.from_pretrained(
@@ -105,9 +108,14 @@ class LitLlamaFreeze(LightningModule):
                 tensor_after = torch.cat(
                     [abs(v.view(-1)) for v in self.grad_after_backward.values()]
                 )
+                # self.log(
+                #     "error_ratio",
+                #     sum((tensor_before / 128) > tensor_after).item()
+                #     / tensor_before.size(0),
+                # )
                 self.log(
                     "error_ratio",
-                    sum((tensor_before / 128) > tensor_after).item()
+                    sum((tensor_before / 8388608) > tensor_after).item()
                     / tensor_before.size(0),
                 )
                 for name, param in self.model.named_parameters():
@@ -175,10 +183,7 @@ class LitLlamaFreeze(LightningModule):
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
                     modified_name = name.replace(".", "_")
-                    self.grad_save[modified_name] = (
-                        torch.log2(abs(param.grad)).view(-1)
-                        # abs(param.grad).view(-1).tolist()
-                    )
+                    self.grad_save[modified_name] = torch.log2(abs(param.grad)).view(-1)
             tensor_all = torch.cat([v for v in self.grad_save.values()])
             list_all = tensor_all.tolist()
             # wandb.log(
@@ -199,11 +204,11 @@ class LitLlamaFreeze(LightningModule):
                     alpha=0.8,
                 )
                 plt.title(
-                    f"{modified_name}",
+                    f"batch_idx{batch_idx} gradient histogram",
                     loc="center",
                     fontweight="bold",
                 )
-                plt.xlabel("abs(gradient)", loc="center", fontweight="bold")
+                plt.xlabel("log2(gradient)", loc="center", fontweight="bold")
                 plt.ylabel("Frequency", loc="center", fontweight="bold")
                 plt.gca().spines["top"].set_visible(False)
                 plt.gca().spines["right"].set_visible(False)
