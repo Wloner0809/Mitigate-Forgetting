@@ -66,14 +66,19 @@ class Prompter(object):
 
 
 def main(
-    model_path: str = "/data/terencewang/llama2-hf",
-    output_dir: str = "work_dirs/lit_llama_lora_inference",
-    lora_dir: str = "work_dirs/lit_llama_freeze",
-    # lora_dir: str = "",
+    # model_path: str = "/data/terencewang/llama2-hf",
+    model_path: str = "work_dir/lit_llama_freeze",
+    # tokenizer_path: str = "/data/terencewang/llama2-hf",
+    tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
+    output_dir: str = "work_dirs/lit_llama_inference",
+    # lora_dir: str = "work_dirs/lit_llama_lora_causal",
+    lora_dir: str = "",
     # dataset_path: str = "/data/terencewang/medmcqa_json",
-    dataset_path: str = "/data/terencewang/truthful_qa/generation",
-    # dataset_name: str = "medmcqa",
-    dataset_name: str = "truthful_qa",
+    dataset_path: str = "/home/wf/Projects/wangyu/data/medmcqa_json",
+    dataset_name: str = "medmcqa",
+    # dataset_path: str = "/data/terencewang/truthful_qa/generation",
+    # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
+    # dataset_name: str = "truthful_qa",
     number_of_samples: int = 500,
 ):
     def get_configs():
@@ -175,15 +180,15 @@ def main(
             if lora_dir != "":
                 model = PeftModel.from_pretrained(model, lora_dir)
             else:
-                logger.info("No lora directory provided, use base model")
+                logger.info("No lora directory provided, use base model/sparse finetuned model")
             model.resize_token_embeddings(model.config.vocab_size + 1)
             model.config.pad_token_id = 0
             model.config.bos_token_id = 1
             model.config.eos_token_id = 2
             return model
 
-    def get_tokenizer(model_path):
-        tokenizer = AutoTokenizer.from_pretrained(model_path, truncation=True)
+    def get_tokenizer(tokenizer_path):
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, truncation=True)
         tokenizer.padding_side = "left"
         tokenizer.pad_token_id = 0
         tokenizer.pad_token = tokenizer.unk_token
@@ -258,7 +263,7 @@ def main(
     generation_cfg, inference_cfg, bnb_config, prompt_config = get_configs()
     accelerator = Accelerator()
     logger.info("Loading tokenizer")
-    tokenizer = get_tokenizer(model_path)
+    tokenizer = get_tokenizer(tokenizer_path)
     logger.info("Loading datasets")
     test_dataset = create_test_dataset(dataset_path, dataset_name, number_of_samples)
     logger.info("Loading model")

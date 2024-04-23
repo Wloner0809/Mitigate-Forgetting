@@ -46,13 +46,15 @@ class Prompter(object):
 
 
 class MedmcqaDataset(Dataset):
-    SAMPLE_NUM = {"train": 5000, "valid": 500, "test": 500}
+    SAMPLE_NUM = {"train": 5000, "valid": 1000, "test": 1000}
 
     def __init__(self, subset) -> None:
         super().__init__()
         self.subset = subset
-        self.data_path = "/data/terencewang/medmcqa/data"
-        self.tokenizer_path = "/data/terencewang/llama2-hf"
+        # self.data_path = "/data/terencewang/medmcqa/data"
+        self.data_path = "/home/wf/Projects/wangyu/data/medmcqa"
+        # self.tokenizer_path = "/data/terencewang/llama2-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
         self.length = self.SAMPLE_NUM[subset]
         self.data = self.prepare_data()
 

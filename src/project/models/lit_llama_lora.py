@@ -13,7 +13,6 @@ import re
 class LitLlamaLora_CausalTask(LightningModule):
     def __init__(
         self,
-        ckpt_path,
         *args,
         **kwargs,
     ) -> None:
@@ -24,16 +23,16 @@ class LitLlamaLora_CausalTask(LightningModule):
         self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
-        self.ckpt_path = ckpt_path
-        self.tokenizer_path = "/data/terencewang/llama2-hf"
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
         self.save_path = "work_dirs/lit_llama_lora_causal"
-        # self.lora_path = "work_dirs/llama_causal"
+        # self.lora_path = "work_dirs/lit_llama_lora_causal"
         self.inference_path = "work_dirs/lit_llama_lora_inference"
         self.predict_result = []
 
-    def configure_model(self):
+    def build_model(self):
         self.model = LlamaForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=self.ckpt_path,
+            pretrained_model_name_or_path=self.hf_path,
         )
         config = LoraConfig(
             r=self.r,
@@ -53,7 +52,6 @@ class LitLlamaLora_CausalTask(LightningModule):
         self.model.config.bos_token_id = 1
         self.model.config.eos_token_id = 2
         self.model.resize_token_embeddings(self.model.config.vocab_size + 1)
-        # super().configure_model()
 
     def forward(self, batch, *args, **kwargs):
         outputs = self.model(
@@ -71,7 +69,6 @@ class LitLlamaLora_CausalTask(LightningModule):
 
     def on_validation_epoch_end(self, *args, **kwargs):
         super().on_validation_epoch_end(*args, **kwargs)
-        # transformers save model
         self.model.save_pretrained(self.save_path)
 
     def predict_forward(self, batch, *args, **kwargs):
@@ -119,7 +116,6 @@ class LitLlamaLora_CausalTask(LightningModule):
 class LitLlamaLora_BinaryTask(LightningModule):
     def __init__(
         self,
-        ckpt_path,
         predict_tasks=None,
         *args,
         **kwargs,
@@ -134,12 +130,12 @@ class LitLlamaLora_BinaryTask(LightningModule):
         self.r = 8
         self.lora_alpha = 16
         self.lora_dropout = 0.05
-        self.ckpt_path = ckpt_path
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
 
     def configure_model(self) -> None:
         if self.model_not_configured:
             self.model = AutoModelForSequenceClassification.from_pretrained(
-                pretrained_model_name_or_path=self.ckpt_path,
+                pretrained_model_name_or_path=self.hf_path,
                 num_labels=2,
             )
             config = LoraConfig(
