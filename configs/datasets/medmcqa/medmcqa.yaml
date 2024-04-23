@@ -26,7 +26,7 @@ data:
           tokenizer:
             class_path: transformers.LlamaTokenizer
             init_args:
-              vocab_file: "/data/terencewang/llama2-hf/tokenizer.model"
+              vocab_file: "/home/wf/Projects/wangyu/model/llama2-hf/tokenizer.model"
               pad_token: "<unk>"
               pad_token_id: 0
               padding_side: "left"

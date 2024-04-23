@@ -1,4 +1,4 @@
 model:
   class_path: project.models.lit_llama_lora.LitLlamaLora_CausalTask
-  init_args:
-    ckpt_path: "/data/terencewang/llama2-hf"
+  # init_args:
+  #   ckpt_path: "/data/terencewang/llama2-hf"
