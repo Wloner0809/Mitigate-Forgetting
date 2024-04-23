@@ -67,7 +67,7 @@ class Prompter(object):
 
 def main(
     # model_path: str = "/data/terencewang/llama2-hf",
-    model_path: str = "work_dir/lit_llama_freeze",
+    model_path: str = "work_dirs/lit_llama_freeze",
     # tokenizer_path: str = "/data/terencewang/llama2-hf",
     tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
     output_dir: str = "work_dirs/lit_llama_inference",
@@ -180,7 +180,9 @@ def main(
             if lora_dir != "":
                 model = PeftModel.from_pretrained(model, lora_dir)
             else:
-                logger.info("No lora directory provided, use base model/sparse finetuned model")
+                logger.info(
+                    "No lora directory provided, use base model/sparse finetuned model"
+                )
             model.resize_token_embeddings(model.config.vocab_size + 1)
             model.config.pad_token_id = 0
             model.config.bos_token_id = 1
