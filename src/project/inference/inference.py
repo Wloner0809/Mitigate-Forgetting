@@ -67,18 +67,21 @@ class Prompter(object):
 
 def main(
     # model_path: str = "/data/terencewang/llama2-hf",
-    model_path: str = "work_dirs/lit_llama_freeze",
+    # model_path: str = "work_dirs/lit_llama_freeze",
+    model_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
     # tokenizer_path: str = "/data/terencewang/llama2-hf",
     tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
     output_dir: str = "work_dirs/lit_llama_inference",
-    # lora_dir: str = "work_dirs/lit_llama_lora_causal",
-    lora_dir: str = "",
+    lora_dir: str = "work_dirs/lit_llama_lora_causal",
+    # lora_dir: str = "",
     # dataset_path: str = "/data/terencewang/medmcqa_json",
     dataset_path: str = "/home/wf/Projects/wangyu/data/medmcqa_json",
     dataset_name: str = "medmcqa",
     # dataset_path: str = "/data/terencewang/truthful_qa/generation",
     # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
-    # dataset_name: str = "truthful_qa",
+    # dataset_name: str = "truthful_qa_generation",
+    # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/multiple_choice",
+    # dataset_name: str = "truthful_qa_mc",
     number_of_samples: int = 500,
 ):
     def get_configs():
@@ -92,7 +95,7 @@ def main(
         inference_cfg = {
             "max_length": 1024,
             "token_batch_size": 16,
-            "inference_batch_size": 12,
+            "inference_batch_size": 8,
         }
         bnb_config = BitsAndBytesConfig(
             load_in_4bit=True,
@@ -114,7 +117,7 @@ def main(
                 "answer": f"{int2char[data['cop']]}",
             }
             return data_dict
-        elif dataset_name == "truthful_qa":
+        elif dataset_name == "truthful_qa_generation":
             return {
                 "instruction": "Solve the following problem by generating a truthful answer.\n Question:\n"
                 + data["question"]
@@ -122,6 +125,15 @@ def main(
                 "answer": data["best_answer"],
                 "incorrect": data["incorrect_answers"],
                 "correct": data["correct_answers"],
+            }
+        elif dataset_name == "truthful_qa_mc":
+            # int2char = {0: "A", 1: "B", 2: "C", 3: "D"}
+            return {
+                "instruction": "Solve the following problem by choosing the correct answer from following four choices.\n Question:\n"
+                + data["question"]
+                + "\nChoices: \n"
+                + f'A.{data["mc1_targets"]["choices"][1]}, B.{data["mc1_targets"]["choices"][0]}, C.{data["mc1_targets"]["choices"][2]}, D.{data["mc1_targets"]["choices"][3]}\nAnswer:',
+                "answer": "B",
             }
 
     def create_test_dataset(
@@ -158,7 +170,20 @@ def main(
                 .shuffle()
             )
             return data
-        elif dataset_name == "truthful_qa":
+        elif dataset_name == "truthful_qa_mc":
+            dataset = load_dataset(dataset_path, split="validation").filter(
+                lambda x: len(x["mc1_targets"]["labels"]) == 4
+            )
+            len_of_data = len(dataset)
+            select_range = range(
+                len_of_data - min(number_of_samples, len_of_data), len_of_data
+            )
+            dataset = dataset.select(select_range)
+            columns = dataset.column_names
+            dataset = dataset.map(lambda x: preprocess(x, dataset_name))
+            dataset = dataset.remove_columns(columns)
+            return dataset
+        elif dataset_name == "truthful_qa_generation":
             dataset = load_dataset(dataset_path, split="validation")
             len_of_data = len(dataset)
             select_range = range(
@@ -175,7 +200,7 @@ def main(
             model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
-                quantization_config=bnb_config,
+                # quantization_config=bnb_config,
             )
             if lora_dir != "":
                 model = PeftModel.from_pretrained(model, lora_dir)
@@ -209,8 +234,9 @@ def main(
                     x["full_prompt"],
                     truncation=True,
                     return_tensors="pt",
-                    padding="max_length",
-                    max_length=inference_cfg["max_length"],
+                    padding=True,
+                    # padding="max_length",
+                    # max_length=inference_cfg["max_length"],
                 ),
                 batched=True,
                 batch_size=inference_cfg["token_batch_size"],
@@ -289,7 +315,7 @@ def main(
             answer = [p["answer"] for p in test_dataset]
             output = output_sequences
             with open(
-                os.path.join(output_dir, f"{dataset_name}_freeze.json"),
+                os.path.join(output_dir, f"{dataset_name}_peft.json"),
                 # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
                 "w",
                 encoding="utf-8",
@@ -300,14 +326,14 @@ def main(
                     ensure_ascii=False,
                     indent=4,
                 )
-        elif dataset_name == "truthful_qa":
+        elif dataset_name == "truthful_qa_generation":
             instruction = [p["instruction"] for p in test_dataset]
             answer = [p["answer"] for p in test_dataset]
             correct = [p["correct"] for p in test_dataset]
             incorrect = [p["incorrect"] for p in test_dataset]
             output = output_sequences
             with open(
-                os.path.join(output_dir, f"{dataset_name}_freeze.json"),
+                os.path.join(output_dir, f"{dataset_name}_peft.json"),
                 # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
                 "w",
                 encoding="utf-8",
@@ -320,6 +346,22 @@ def main(
                         "correct": correct,
                         "incorrect": incorrect,
                     },
+                    f,
+                    ensure_ascii=False,
+                    indent=4,
+                )
+        elif dataset_name == "truthful_qa_mc":
+            instruction = [p["instruction"] for p in test_dataset]
+            answer = [p["answer"] for p in test_dataset]
+            output = output_sequences
+            with open(
+                os.path.join(output_dir, f"{dataset_name}_peft.json"),
+                # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    {"instruction": instruction, "answer": answer, "output": output},
                     f,
                     ensure_ascii=False,
                     indent=4,
