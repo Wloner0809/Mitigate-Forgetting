@@ -1,5 +1,5 @@
 from torch.utils.data import Dataset
-from datasets import load_dataset
+from datasets import load_dataset, concatenate_datasets
 from transformers import LlamaTokenizer
 import json
 import os.path as osp
@@ -46,7 +46,7 @@ class Prompter(object):
 
 
 class MedmcqaDataset(Dataset):
-    SAMPLE_NUM = {"train": 5000, "valid": 1000, "test": 1000}
+    SAMPLE_NUM = {"train": 2000, "valid": 200, "test": 1000}
 
     def __init__(self, subset) -> None:
         super().__init__()
@@ -90,19 +90,31 @@ class MedmcqaDataset(Dataset):
         )
 
         if self.subset == "train":
-            all_data = train_data.select(range(self.SAMPLE_NUM["train"]))
+            A = train_data.filter(lambda x: x["output"] == "A").select(
+                range(int(self.SAMPLE_NUM["train"] / 4))
+            )
+            B = train_data.filter(lambda x: x["output"] == "B").select(
+                range(int(self.SAMPLE_NUM["train"] / 4))
+            )
+            C = train_data.filter(lambda x: x["output"] == "C").select(
+                range(int(self.SAMPLE_NUM["train"] / 4))
+            )
+            D = train_data.filter(lambda x: x["output"] == "D").select(
+                range(int(self.SAMPLE_NUM["train"] / 4))
+            )
+            all_data = concatenate_datasets([A, B, C, D]).shuffle()
         elif self.subset == "valid":
             all_data = train_data.select(
                 range(
-                    self.SAMPLE_NUM["train"],
-                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                    2 * self.SAMPLE_NUM["train"],
+                    2 * self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
                 )
             )
         elif self.subset == "test":
             all_data = train_data.select(
                 range(
-                    self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
-                    self.SAMPLE_NUM["train"]
+                    2 * self.SAMPLE_NUM["train"] + self.SAMPLE_NUM["valid"],
+                    2 * self.SAMPLE_NUM["train"]
                     + self.SAMPLE_NUM["valid"]
                     + self.SAMPLE_NUM["test"],
                 )
