@@ -17,7 +17,7 @@ data:
         - init_args:
             subset: test
     dataloader_cfg:
-      batch_size: 16
+      batch_size: 8
       prefetch_factor: null
       pin_memory: true
       collate_fn:

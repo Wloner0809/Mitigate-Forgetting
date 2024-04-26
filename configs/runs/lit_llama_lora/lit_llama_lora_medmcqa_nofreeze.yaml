@@ -1,5 +1,0 @@
-__base__:
-  - ../../default_runtime.yaml
-  - ../../schedules/schedule_nofreeze.yaml
-  - ../../datasets/medmcqa/medmcqa.yaml
-  - ../../models/lit_llama_lora/lit_llama_lora_nofreeze.yaml

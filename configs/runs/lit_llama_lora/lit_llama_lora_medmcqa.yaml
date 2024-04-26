@@ -1,0 +1,5 @@
+__base__:
+  - ../../default_runtime.yaml
+  - ../../schedules/schedule_lora.yaml
+  - ../../datasets/medmcqa/medmcqa.yaml
+  - ../../models/lit_llama_lora/lit_llama_lora.yaml

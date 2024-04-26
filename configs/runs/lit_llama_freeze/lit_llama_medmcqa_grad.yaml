@@ -1,0 +1,5 @@
+__base__:
+  - ../../default_runtime.yaml
+  - ../../schedules/schedule_grad.yaml
+  - ../../datasets/medmcqa/medmcqa.yaml
+  - ../../models/lit_llama_freeze/lit_llama_grad.yaml
