@@ -24,12 +24,114 @@ class LitLlamaFreeze(LightningModule):
         self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
         self.save_path = "work_dirs/lit_llama_freeze"
         self.gradient_norm_path = (
-            "work_dirs/lit_llama_gradient/lit_llama_gradient_norm.json"
+            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
         )
-        self.pic_path = "work_dirs/lit_llama_gradient/"
+        self.pic_path = "work_dirs/lit_llama_grad/"
         self.automatic_optimization = False
-        self.freeze_ratio = 0.96
-        self.freeze_layer_num = 24
+        self.freeze_ratio = 0.99
+        self.freeze_layer_num = 20
+        self.freeze_idx = self._prepare_freeze_idx()
+        self.freeze_name = self._prepare_freeze_name()
+        # # precision setting
+        # torch.backends.cudnn.allow_tf32 = True
+        # torch.backends.cuda.matmul.allow_tf32 = True
+
+    def build_model(self):
+        self.model = LlamaForCausalLM.from_pretrained(
+            pretrained_model_name_or_path=self.hf_path,
+        )
+        # # freeze some layers due to memory limitation
+        # for param in self.model.parameters():
+        #     param.requires_grad = False
+        # for param in self.model.lm_head.parameters():
+        #     param.requires_grad = True
+        # # for name, param in self.model.model.layers[
+        # #     self.freeze_layer_num :
+        # # ].named_parameters():
+        # #     if "mlp" in name:
+        # #         param.requires_grad = False
+        # #     else:
+        # #         param.requires_grad = True
+        # for param in self.model.model.layers[self.freeze_layer_num :].parameters():
+        #     param.requires_grad = True
+        self.model.config.pad_token_id = 0
+        self.model.config.bos_token_id = 1
+        self.model.config.eos_token_id = 2
+        self.model.resize_token_embeddings(self.model.config.vocab_size + 1)
+        for name, param in self.model.named_parameters():
+            if param.requires_grad:
+                modified_name = name.replace(".", "_")
+                if modified_name in self.freeze_name:
+                    param.requires_grad = False
+
+    def training_step(self, batch, batch_idx, dataloader_idx=None, *args, **kwargs):
+        outputs = self.model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            labels=batch["labels"],
+        )
+        optimizer = self.optimizers()
+        optimizer.zero_grad()
+        loss = outputs.loss
+        self.manual_backward(loss)
+        optimizer.step()
+        self.log("loss_freeze", outputs.loss)
+        del outputs, loss
+        torch.cuda.empty_cache()
+
+    def forward(self, batch, *args, **kwargs):
+        outputs = self.model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            labels=batch["labels"],
+        )
+        return {
+            "loss_dict": {
+                "loss_causal": outputs.loss,
+                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
+            },
+            "metric_dict": {},
+        }
+
+    def on_validation_epoch_end(self, *args, **kwargs):
+        super().on_validation_epoch_end(*args, **kwargs)
+        lr_scheduler = self.lr_schedulers()
+        lr_scheduler.step()
+        self.model.save_pretrained(self.save_path)
+
+    def _prepare_freeze_idx(self):
+        with open(self.gradient_norm_path, "r", encoding="utf-8") as f:
+            freeze_idx = json.load(f)
+        return freeze_idx
+
+    def _prepare_freeze_name(self):
+        freeze_name = []
+        sorted_idx = sorted(self.freeze_idx.items(), key=lambda x: x[1])
+        freeze_num = int(len(sorted_idx) * self.freeze_ratio)
+        for i in range(freeze_num):
+            name = sorted_idx[i][0]
+            freeze_name.append(name)
+        return freeze_name
+
+
+class LitLlamaGrad(LightningModule):
+    def __init__(
+        self,
+        *args,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            *args,
+            **kwargs,
+        )
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.gradient_norm_path = (
+            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
+        )
+        self.pic_path = "work_dirs/lit_llama_grad/"
+        self.automatic_optimization = False
+        self.freeze_layer_num = 20
         self.freeze_idx: Dict[str, torch.Tensor] = {}
         self.grad_save: Dict[str, torch.Tensor] = {}
         self.grad_before_backward: Dict[str, torch.Tensor] = {}
@@ -43,125 +145,102 @@ class LitLlamaFreeze(LightningModule):
         self.model = LlamaForCausalLM.from_pretrained(
             pretrained_model_name_or_path=self.hf_path,
         )
-        # freeze some layers due to memory limitation
-        for param in self.model.parameters():
-            param.requires_grad = False
-        for param in self.model.lm_head.parameters():
-            param.requires_grad = True
-        # for name, param in self.model.model.layers[
-        #     self.freeze_layer_num :
-        # ].named_parameters():
-        #     if "mlp" in name:
-        #         param.requires_grad = False
-        #     else:
-        #         param.requires_grad = True
-        for param in self.model.model.layers[self.freeze_layer_num :].parameters():
-            param.requires_grad = True
+        # # freeze some layers due to memory limitation
+        # for param in self.model.parameters():
+        #     param.requires_grad = False
+        # for param in self.model.lm_head.parameters():
+        #     param.requires_grad = True
+        # # for name, param in self.model.model.layers[
+        # #     self.freeze_layer_num :
+        # # ].named_parameters():
+        # #     if "mlp" in name:
+        # #         param.requires_grad = False
+        # #     else:
+        # #         param.requires_grad = True
+        # for param in self.model.model.layers[self.freeze_layer_num :].parameters():
+        #     param.requires_grad = True
         self.model.config.pad_token_id = 0
         self.model.config.bos_token_id = 1
         self.model.config.eos_token_id = 2
         self.model.resize_token_embeddings(self.model.config.vocab_size + 1)
 
     def training_step(self, batch, batch_idx, dataloader_idx=None, *args, **kwargs):
-        if self.current_epoch == 0:
-            outputs = self.model(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                labels=batch["labels"],
-            )
+        outputs = self.model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+            labels=batch["labels"],
+        )
 
-            # # prevent gradient explosion if needed
-            # def hook(grad):
-            #     l2norm = torch.norm(grad, p=2)
-            #     maxnorm = 50000
-            #     if l2norm > maxnorm:
-            #         return grad * (maxnorm / l2norm)
-            #     else:
-            #         return grad
+        # # prevent gradient explosion if needed
+        # def hook(grad):
+        #     l2norm = torch.norm(grad, p=2)
+        #     maxnorm = 50000
+        #     if l2norm > maxnorm:
+        #         return grad * (maxnorm / l2norm)
+        #     else:
+        #         return grad
 
-            # for name, param in self.model.named_parameters():
-            #     if param.requires_grad:
-            #         param.register_hook(hook)
+        # for name, param in self.model.named_parameters():
+        #     if param.requires_grad:
+        #         param.register_hook(hook)
 
-            # for param in self.model.parameters():
-            #     if param.requires_grad and param.grad is not None:
-            #         param.grad = param.grad * batch_idx / (batch_idx + 1)
+        # for param in self.model.parameters():
+        #     if param.requires_grad and param.grad is not None:
+        #         param.grad = param.grad * batch_idx / (batch_idx + 1)
 
-            # if batch_idx % 64 == 1:
-            #     for name, param in self.model.named_parameters():
-            #         if param.requires_grad:
-            #             modified_name = name.replace(".", "_")
-            #             self.grad_before_backward[modified_name] = param.grad
-            #     self.model.zero_grad()
+        # if batch_idx % 64 == 1:
+        #     for name, param in self.model.named_parameters():
+        #         if param.requires_grad:
+        #             modified_name = name.replace(".", "_")
+        #             self.grad_before_backward[modified_name] = param.grad
+        #     self.model.zero_grad()
 
-            loss = outputs.loss
-            # self.manual_backward(loss / (batch_idx + 1))
-            self.manual_backward(loss)
+        loss = outputs.loss
+        # self.manual_backward(loss / (batch_idx + 1))
+        self.manual_backward(loss)
 
-            # if batch_idx % 64 == 1:
-            #     for name, param in self.model.named_parameters():
-            #         if param.requires_grad:
-            #             modified_name = name.replace(".", "_")
-            #             self.grad_after_backward[modified_name] = param.grad
-            #     tensor_before = torch.cat(
-            #         [abs(v.view(-1)) for v in self.grad_before_backward.values()]
-            #     )
-            #     tensor_after = torch.cat(
-            #         [abs(v.view(-1)) for v in self.grad_after_backward.values()]
-            #     )
-            #     # self.log(
-            #     #     "error_ratio",
-            #     #     sum((tensor_before / 128) > tensor_after).item()
-            #     #     / tensor_before.size(0),
-            #     # )
-            #     self.log(
-            #         "error_ratio",
-            #         sum((tensor_before / 1024) > tensor_after).item()
-            #         / tensor_before.size(0),
-            #     )
-            #     for name, param in self.model.named_parameters():
-            #         if param.requires_grad:
-            #             modified_name = name.replace(".", "_")
-            #             param.grad = (
-            #                 self.grad_before_backward[modified_name]
-            #                 + self.grad_after_backward[modified_name]
-            #             )
-            #     del tensor_before, tensor_after
-            #     torch.cuda.empty_cache()
+        # if batch_idx % 64 == 1:
+        #     for name, param in self.model.named_parameters():
+        #         if param.requires_grad:
+        #             modified_name = name.replace(".", "_")
+        #             self.grad_after_backward[modified_name] = param.grad
+        #     tensor_before = torch.cat(
+        #         [abs(v.view(-1)) for v in self.grad_before_backward.values()]
+        #     )
+        #     tensor_after = torch.cat(
+        #         [abs(v.view(-1)) for v in self.grad_after_backward.values()]
+        #     )
+        #     # self.log(
+        #     #     "error_ratio",
+        #     #     sum((tensor_before / 128) > tensor_after).item()
+        #     #     / tensor_before.size(0),
+        #     # )
+        #     self.log(
+        #         "error_ratio",
+        #         sum((tensor_before / 1024) > tensor_after).item()
+        #         / tensor_before.size(0),
+        #     )
+        #     for name, param in self.model.named_parameters():
+        #         if param.requires_grad:
+        #             modified_name = name.replace(".", "_")
+        #             param.grad = (
+        #                 self.grad_before_backward[modified_name]
+        #                 + self.grad_after_backward[modified_name]
+        #             )
+        #     del tensor_before, tensor_after
+        #     torch.cuda.empty_cache()
 
-            if self.trainer.is_last_batch:
-                for name, param in self.model.named_parameters():
-                    if param.requires_grad:
-                        l1_norm = torch.norm(param.grad, p=1)
-                        modified_name = name.replace(".", "_")
-                        self.freeze_idx[modified_name] = l1_norm.tolist()
-                with open(self.gradient_norm_path, "w", encoding="utf-8") as f:
-                    json.dump(self.freeze_idx, f, indent=4)
-            self.log("loss_freeze", outputs.loss)
-        else:
-            outputs = self.model(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-                labels=batch["labels"],
-            )
-            sorted_idx = sorted(self.freeze_idx.items(), key=lambda x: x[1])
-            freeze_num = int(len(sorted_idx) * self.freeze_ratio)
-            for i in range(freeze_num):
-                name = sorted_idx[i][0]
-                self.freeze_name.append(name)
-
+        if self.trainer.is_last_batch:
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
+                    l1_norm = torch.norm(param.grad, p=1)
                     modified_name = name.replace(".", "_")
-                    if modified_name in self.freeze_name:
-                        param.requires_grad = False
-
-            optimizer = self.optimizers()
-            optimizer.zero_grad()
-            loss = outputs.loss
-            self.manual_backward(loss)
-            optimizer.step()
-            self.log("loss_freeze", outputs.loss)
+                    self.freeze_idx[modified_name] = l1_norm.tolist()
+            with open(self.gradient_norm_path, "w", encoding="utf-8") as f:
+                json.dump(self.freeze_idx, f, indent=4)
+        self.log("loss_freeze", outputs.loss)
+        del outputs, loss
+        torch.cuda.empty_cache()
 
     def forward(self, batch, *args, **kwargs):
         outputs = self.model(
@@ -222,12 +301,6 @@ class LitLlamaFreeze(LightningModule):
     #             plt.cla()
     #             plt.clf()
     #             plt.close("all")
-
-    def on_validation_epoch_end(self, *args, **kwargs):
-        super().on_validation_epoch_end(*args, **kwargs)
-        lr_scheduler = self.lr_schedulers()
-        lr_scheduler.step()
-        self.model.save_pretrained(self.save_path)
 
 
 class LitLlamaFreeze_Baseline(LightningModule):
