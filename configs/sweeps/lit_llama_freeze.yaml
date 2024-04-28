@@ -1,0 +1,36 @@
+name: lit_llama_freeze
+method: bayes
+metric:
+  goal: minimize
+  name: val/loss_causal/dataloader_idx_0
+program: cli
+parameters:
+  optimizer_config/optimizer/init_args/lr:
+    distribution: log_uniform_values
+    max: 1e-01
+    min: 1e-05
+  optimizer_config/optimizer/init_args/weight_decay:
+    distribution: log_uniform_values
+    max: 1e-01
+    min: 1e-05
+  optimizer_config/lr_scheduler/scheduler/init_args/gamma:
+    distribution: uniform
+    max: 1.0
+    min: 0.8
+  trainer/max_epochs:
+    distribution: int_uniform
+    max: 24
+    min: 3
+  data/init_args/dataloader_cfg/batch_size:
+    distribution: int_uniform
+    max: 16
+    min: 4
+
+command:
+  - ${env}
+  - "cli"
+  - "fit"
+  - "--config"
+  - "configs/runs/lit_llama_freeze/lit_llama_medmcqa_freeze.yaml"
+  - "--json-file"
+  - ${args_json_file}
