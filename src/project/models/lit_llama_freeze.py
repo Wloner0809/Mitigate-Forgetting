@@ -20,15 +20,21 @@ class LitLlamaFreeze(LightningModule):
             *args,
             **kwargs,
         )
-        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
         self.save_path = "work_dirs/lit_llama_freeze"
+        # self.gradient_norm_path = (
+        #     "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
+        # )
         self.gradient_norm_path = (
-            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
+            "work_dirs/lit_llama_grad/lit_llama_chat_gradient_norm.json"
         )
         self.pic_path = "work_dirs/lit_llama_grad/"
         self.automatic_optimization = False
-        self.freeze_ratio = 0.99
+        # self.freeze_ratio = 0.99
+        self.unfreeze_num = 16
         self.freeze_layer_num = 20
         self.freeze_idx = self._prepare_freeze_idx()
         self.freeze_name = self._prepare_freeze_name()
@@ -85,6 +91,7 @@ class LitLlamaFreeze(LightningModule):
             attention_mask=batch["attention_mask"],
             labels=batch["labels"],
         )
+        # TODO: add inference here and modify metric_dict
         return {
             "loss_dict": {
                 "loss_causal": outputs.loss,
@@ -107,7 +114,8 @@ class LitLlamaFreeze(LightningModule):
     def _prepare_freeze_name(self):
         freeze_name = []
         sorted_idx = sorted(self.freeze_idx.items(), key=lambda x: x[1])
-        freeze_num = int(len(sorted_idx) * self.freeze_ratio)
+        # freeze_num = int(len(sorted_idx) * self.freeze_ratio)
+        freeze_num = len(sorted_idx) - self.unfreeze_num
         for i in range(freeze_num):
             name = sorted_idx[i][0]
             freeze_name.append(name)
@@ -124,10 +132,15 @@ class LitLlamaGrad(LightningModule):
             *args,
             **kwargs,
         )
-        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        # self.gradient_norm_path = (
+        #     "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
+        # )
         self.gradient_norm_path = (
-            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
+            "work_dirs/lit_llama_grad/lit_llama_chat_gradient_norm.json"
         )
         self.pic_path = "work_dirs/lit_llama_grad/"
         self.automatic_optimization = False
@@ -233,9 +246,9 @@ class LitLlamaGrad(LightningModule):
         if self.trainer.is_last_batch:
             for name, param in self.model.named_parameters():
                 if param.requires_grad:
-                    l1_norm = torch.norm(param.grad, p=1)
+                    l1_norm_aver = torch.norm(param.grad, p=1) / param.grad.numel()
                     modified_name = name.replace(".", "_")
-                    self.freeze_idx[modified_name] = l1_norm.tolist()
+                    self.freeze_idx[modified_name] = l1_norm_aver.tolist()
             with open(self.gradient_norm_path, "w", encoding="utf-8") as f:
                 json.dump(self.freeze_idx, f, indent=4)
         self.log("loss_freeze", outputs.loss)
