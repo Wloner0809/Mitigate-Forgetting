@@ -1,3 +1,2 @@
 model:
   class_path: project.models.lit_llama_lora.LitLlamaLora_CausalTask
-

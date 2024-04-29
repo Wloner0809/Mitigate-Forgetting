@@ -19,7 +19,7 @@ parameters:
     min: 0.8
   trainer/max_epochs:
     distribution: int_uniform
-    max: 24
+    max: 12
     min: 3
   data/init_args/dataloader_cfg/batch_size:
     distribution: int_uniform

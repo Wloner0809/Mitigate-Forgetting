@@ -84,18 +84,52 @@ def evaluate_medmcqa(output, ground_truth, path):
 
 
 if __name__ == "__main__":
+    # from beautifultable import BeautifulTable
+
+    # table = BeautifulTable()
+    # for r in [8, 32, 64, 128, 256]:
+    #     with open(
+    #         f"work_dirs/lit_llama_inference/lora_r{r}/medmcqa_peft.json",
+    #         "r",
+    #         encoding="utf-8",
+    #     ) as f:
+    #         result = json.load(f)
+    #     answer = result["answer"]
+    #     output = result["output"]
+    #     accuracy = evaluate_medmcqa(
+    #         output, answer, f"work_dirs/lit_llama_inference/lora_r{r}/medmcqa_peft.png"
+    #     )
+    #     print(f"PEFT finetuned Accuracy: {accuracy}")
+
+    #     table.rows.append([accuracy])
+
+    # for layer in [3, 16]:
+    #     with open(
+    #         f"work_dirs/lit_llama_inference/top{layer}layernorm/medmcqa_peft.json",
+    #         "r",
+    #         encoding="utf-8",
+    #     ) as f:
+    #         result = json.load(f)
+    #     answer = result["answer"]
+    #     output = result["output"]
+    #     accuracy = evaluate_medmcqa(
+    #         output,
+    #         answer,
+    #         f"work_dirs/lit_llama_inference/top{layer}layernorm/medmcqa_peft.png",
+    #     )
+    #     print(f"PEFT finetuned Accuracy: {accuracy}")
+
+    #     table.rows.append([accuracy])
+
+    # table.columns.header = ["acc"]
+    # table.rows.header = ["r=8", "r=32", "r=64", "r=128", "r=256", "topk=3", "topk=16"]
+    # table.set_style(BeautifulTable.STYLE_RST)
+    # print(table)
+    # with open("work_dirs/lit_llama_inference/medmcqa_acc.txt", "w") as f:
+    #     f.write(table.__str__())
+
     with open(
-        "work_dirs/lit_llama_lora_inference/medmcqa_freeze.json", "r", encoding="utf-8"
-    ) as f:
-        result = json.load(f)
-    answer = result["answer"]
-    output = result["output"]
-    accuracy = evaluate_medmcqa(
-        output, answer, "work_dirs/lit_llama_lora_inference/medmcqa_freeze.png"
-    )
-    print(f"LoRA finetuned Accuracy: {accuracy}")
-    with open(
-        "work_dirs/lit_llama_lora_inference/medmcqa_baseline.json",
+        "work_dirs/lit_llama_inference/medmcqa_peft.json",
         "r",
         encoding="utf-8",
     ) as f:
@@ -103,6 +137,6 @@ if __name__ == "__main__":
     answer = result["answer"]
     output = result["output"]
     accuracy = evaluate_medmcqa(
-        output, answer, "work_dirs/lit_llama_lora_inference/medmcqa_baseline.png"
+        output, answer, "work_dirs/lit_llama_inference/medmcqa_peft.png"
     )
-    print(f"Baseline Accuracy: {accuracy}")
+    print(f"PEFT Accuracy: {accuracy}")
