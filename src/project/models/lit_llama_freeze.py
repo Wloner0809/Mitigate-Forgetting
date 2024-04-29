@@ -95,7 +95,6 @@ class LitLlamaFreeze(LightningModule):
         return {
             "loss_dict": {
                 "loss_causal": outputs.loss,
-                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
             },
             "metric_dict": {},
         }
@@ -264,7 +263,6 @@ class LitLlamaGrad(LightningModule):
         return {
             "loss_dict": {
                 "loss_causal": outputs.loss,
-                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
             },
             "metric_dict": {},
         }
@@ -394,7 +392,6 @@ class LitLlamaFreeze_Baseline(LightningModule):
         return {
             "loss_dict": {
                 "loss_causal": outputs.loss,
-                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
             },
             "metric_dict": {},
         }

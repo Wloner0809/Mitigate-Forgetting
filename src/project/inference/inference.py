@@ -6,7 +6,6 @@ import time
 import torch
 from peft import PeftModel
 from transformers import (
-    BitsAndBytesConfig,
     DataCollatorWithPadding,
     AutoModelForCausalLM,
     AutoTokenizer,
@@ -68,18 +67,18 @@ class Prompter(object):
 def main(
     # model_path: str = "/data/terencewang/llama2-hf",
     # model_path: str = "work_dirs/lit_llama_freeze",
-    model_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
+    model_path: str = "/home/wf/Projects/wangyu/model/llama2-chat-hf",
     # tokenizer_path: str = "/data/terencewang/llama2-hf",
-    tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
+    tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-chat-hf",
     output_dir: str = "work_dirs/lit_llama_inference",
-    lora_dir: str = "work_dirs/lit_llama_lora_causal",
-    # lora_dir: str = "",
+    # lora_dir: str = "work_dirs/lit_llama_lora_causal/r256",
+    lora_dir: str = "",
     # dataset_path: str = "/data/terencewang/medmcqa_json",
-    dataset_path: str = "/home/wf/Projects/wangyu/data/medmcqa_json",
-    dataset_name: str = "medmcqa",
+    # dataset_path: str = "/home/wf/Projects/wangyu/data/medmcqa_json",
+    # dataset_name: str = "medmcqa",
     # dataset_path: str = "/data/terencewang/truthful_qa/generation",
-    # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
-    # dataset_name: str = "truthful_qa_generation",
+    dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
+    dataset_name: str = "truthful_qa_generation",
     # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/multiple_choice",
     # dataset_name: str = "truthful_qa_mc",
     number_of_samples: int = 500,
@@ -93,18 +92,11 @@ def main(
             "do_sample": False,
         }
         inference_cfg = {
-            "max_length": 1024,
             "token_batch_size": 16,
             "inference_batch_size": 8,
         }
-        bnb_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_use_double_quant=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.bfloat16,
-        )
         prompt_config = Prompter("alpaca")
-        return generation_cfg, inference_cfg, bnb_config, prompt_config
+        return generation_cfg, inference_cfg, prompt_config
 
     def preprocess(data, dataset_name):
         if dataset_name == "medmcqa":
@@ -195,12 +187,11 @@ def main(
             dataset = dataset.remove_columns(columns)
             return dataset
 
-    def get_model(model_path, lora_dir, bnb_config, accelerator):
+    def get_model(model_path, lora_dir, accelerator):
         with accelerator.main_process_first():
             model = AutoModelForCausalLM.from_pretrained(
                 model_path,
                 device_map="auto",
-                # quantization_config=bnb_config,
             )
             if lora_dir != "":
                 model = PeftModel.from_pretrained(model, lora_dir)
@@ -235,8 +226,6 @@ def main(
                     truncation=True,
                     return_tensors="pt",
                     padding=True,
-                    # padding="max_length",
-                    # max_length=inference_cfg["max_length"],
                 ),
                 batched=True,
                 batch_size=inference_cfg["token_batch_size"],
@@ -288,14 +277,14 @@ def main(
         logger.error("Could not find adapter checkpoint directory")
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    generation_cfg, inference_cfg, bnb_config, prompt_config = get_configs()
+    generation_cfg, inference_cfg, prompt_config = get_configs()
     accelerator = Accelerator()
     logger.info("Loading tokenizer")
     tokenizer = get_tokenizer(tokenizer_path)
     logger.info("Loading datasets")
     test_dataset = create_test_dataset(dataset_path, dataset_name, number_of_samples)
     logger.info("Loading model")
-    model = get_model(model_path, lora_dir, bnb_config, accelerator)
+    model = get_model(model_path, lora_dir, accelerator)
     logger.info("starting inference")
     dataloader = get_dataloader(
         test_dataset, tokenizer, inference_cfg, prompt_config, accelerator

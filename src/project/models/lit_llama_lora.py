@@ -62,7 +62,6 @@ class LitLlamaLora_CausalTask(LightningModule):
         return {
             "loss_dict": {
                 "loss_causal": outputs.loss,
-                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
             },
             "metric_dict": {},
         }
@@ -132,7 +131,7 @@ class LitLlamaLora_BinaryTask(LightningModule):
         self.lora_dropout = 0.05
         self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
 
-    def configure_model(self) -> None:
+    def build_model(self) -> None:
         if self.model_not_configured:
             self.model = AutoModelForSequenceClassification.from_pretrained(
                 pretrained_model_name_or_path=self.hf_path,
@@ -154,7 +153,6 @@ class LitLlamaLora_BinaryTask(LightningModule):
 
             if "confusion_matrix" in self.predict_tasks:
                 self.confusion = ConfusionMatrix(task="binary", num_classes=2)
-            # super().configure_model()
 
     def forward(self, batch, *args, **kwargs):
         outputs = self.model(
@@ -166,7 +164,6 @@ class LitLlamaLora_BinaryTask(LightningModule):
         return {
             "loss_dict": {
                 "loss_cls": outputs.loss,
-                "loss_parameter": sum(p.pow(2).mean() for p in self.parameters()),
             },
             "metric_dict": {"preds": preds, "target": batch["labels"]},
         }
