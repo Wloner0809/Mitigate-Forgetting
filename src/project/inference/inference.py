@@ -67,20 +67,22 @@ class Prompter(object):
 def main(
     # model_path: str = "/data/terencewang/llama2-hf",
     # model_path: str = "work_dirs/lit_llama_freeze",
-    model_path: str = "/home/wf/Projects/wangyu/model/llama2-chat-hf",
+    model_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
     # tokenizer_path: str = "/data/terencewang/llama2-hf",
-    tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-chat-hf",
+    tokenizer_path: str = "/home/wf/Projects/wangyu/model/llama2-hf",
     output_dir: str = "work_dirs/lit_llama_inference",
-    # lora_dir: str = "work_dirs/lit_llama_lora_causal/r256",
-    lora_dir: str = "",
+    lora_dir: str = "work_dirs/lit_llama_lora_causal",
+    # lora_dir: str = "",
     # dataset_path: str = "/data/terencewang/medmcqa_json",
     # dataset_path: str = "/home/wf/Projects/wangyu/data/medmcqa_json",
     # dataset_name: str = "medmcqa",
     # dataset_path: str = "/data/terencewang/truthful_qa/generation",
-    dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
-    dataset_name: str = "truthful_qa_generation",
+    # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/generation",
+    # dataset_name: str = "truthful_qa_generation",
     # dataset_path: str = "/home/wf/Projects/wangyu/data/truthful_qa/multiple_choice",
     # dataset_name: str = "truthful_qa_mc",
+    dataset_path: str = "",
+    dataset_name: str = "eli5_category",
     number_of_samples: int = 500,
 ):
     def get_configs():
@@ -102,10 +104,10 @@ def main(
         if dataset_name == "medmcqa":
             int2char = {1: "A", 2: "B", 3: "C", 4: "D"}
             data_dict = {
-                "instruction": "Solve the following medical problem by choosing the correct answer from following four choices.\nQuestion:\n"
+                "instruction": "Question: "
                 + data["question"]
-                + "\nChoices: \n"
-                + f"A.{data['opa']}, B.{data['opb']}, C.{data['opc']}, D.{data['opd']}\n Answer:",
+                + "\nChoices:\n"
+                + f"A. {data['opa']}\nB. {data['opb']}\nC. {data['opc']}\nD. {data['opd']}\nAnswer:",
                 "answer": f"{int2char[data['cop']]}",
             }
             return data_dict
@@ -126,6 +128,12 @@ def main(
                 + "\nChoices: \n"
                 + f'A.{data["mc1_targets"]["choices"][1]}, B.{data["mc1_targets"]["choices"][0]}, C.{data["mc1_targets"]["choices"][2]}, D.{data["mc1_targets"]["choices"][3]}\nAnswer:',
                 "answer": "B",
+            }
+        elif dataset_name == "eli5_category":
+            return {
+                "instruction": "Given the following text, write the possible curious question it answers:\n"
+                + data["answers"]["text"][0],
+                "answer": data["title"],
             }
 
     def create_test_dataset(
@@ -177,6 +185,17 @@ def main(
             return dataset
         elif dataset_name == "truthful_qa_generation":
             dataset = load_dataset(dataset_path, split="validation")
+            len_of_data = len(dataset)
+            select_range = range(
+                len_of_data - min(number_of_samples, len_of_data), len_of_data
+            )
+            dataset = dataset.select(select_range)
+            columns = dataset.column_names
+            dataset = dataset.map(lambda x: preprocess(x, dataset_name))
+            dataset = dataset.remove_columns(columns)
+            return dataset
+        elif dataset_name == "eli5_category":
+            dataset = load_dataset(dataset_name, split="test")
             len_of_data = len(dataset)
             select_range = range(
                 len_of_data - min(number_of_samples, len_of_data), len_of_data
@@ -344,6 +363,23 @@ def main(
             answer = [p["answer"] for p in test_dataset]
             output = output_sequences
             with open(
+                os.path.join(output_dir, f"{dataset_name}_peft.json"),
+                # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
+                "w",
+                encoding="utf-8",
+            ) as f:
+                json.dump(
+                    {"instruction": instruction, "answer": answer, "output": output},
+                    f,
+                    ensure_ascii=False,
+                    indent=4,
+                )
+        elif dataset_name == "eli5_category":
+            instruction = [p["instruction"] for p in test_dataset]
+            answer = [p["answer"] for p in test_dataset]
+            output = output_sequences
+            with open(
+                # os.path.join(output_dir, f"{dataset_name}_freeze.json"),
                 os.path.join(output_dir, f"{dataset_name}_peft.json"),
                 # os.path.join(output_dir, f"{dataset_name}_baseline.json"),
                 "w",

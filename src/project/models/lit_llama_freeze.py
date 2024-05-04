@@ -20,16 +20,16 @@ class LitLlamaFreeze(LightningModule):
             *args,
             **kwargs,
         )
-        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
-        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
         self.save_path = "work_dirs/lit_llama_freeze"
         # self.gradient_norm_path = (
         #     "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
         # )
         self.gradient_norm_path = (
-            "work_dirs/lit_llama_grad/lit_llama_chat_gradient_norm.json"
+            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
         )
         self.pic_path = "work_dirs/lit_llama_grad/"
         self.automatic_optimization = False
@@ -91,18 +91,17 @@ class LitLlamaFreeze(LightningModule):
             attention_mask=batch["attention_mask"],
             labels=batch["labels"],
         )
-        # TODO: add inference here and modify metric_dict
         return {
             "loss_dict": {
-                "loss_causal": outputs.loss,
+                "loss_freeze": outputs.loss,
             },
             "metric_dict": {},
         }
 
-    def on_validation_epoch_end(self, *args, **kwargs):
-        super().on_validation_epoch_end(*args, **kwargs)
-        lr_scheduler = self.lr_schedulers()
-        lr_scheduler.step()
+    def on_train_epoch_end(self, *args, **kwargs):
+        super().on_train_epoch_end(*args, **kwargs)
+        # lr_scheduler = self.lr_schedulers()
+        # lr_scheduler.step()
         self.model.save_pretrained(self.save_path)
 
     def _prepare_freeze_idx(self):
@@ -131,15 +130,15 @@ class LitLlamaGrad(LightningModule):
             *args,
             **kwargs,
         )
-        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
-        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
-        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        self.hf_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-hf"
+        # self.hf_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
+        # self.tokenizer_path = "/home/wf/Projects/wangyu/model/llama2-chat-hf"
         # self.gradient_norm_path = (
         #     "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
         # )
         self.gradient_norm_path = (
-            "work_dirs/lit_llama_grad/lit_llama_chat_gradient_norm.json"
+            "work_dirs/lit_llama_grad/lit_llama_gradient_norm.json"
         )
         self.pic_path = "work_dirs/lit_llama_grad/"
         self.automatic_optimization = False
@@ -262,7 +261,7 @@ class LitLlamaGrad(LightningModule):
         )
         return {
             "loss_dict": {
-                "loss_causal": outputs.loss,
+                "loss_no_grad_update": outputs.loss,
             },
             "metric_dict": {},
         }
@@ -396,8 +395,8 @@ class LitLlamaFreeze_Baseline(LightningModule):
             "metric_dict": {},
         }
 
-    def on_validation_epoch_end(self, *args, **kwargs):
-        super().on_validation_epoch_end(*args, **kwargs)
+    def on_train_epoch_end(self, *args, **kwargs):
+        super().on_train_epoch_end(*args, **kwargs)
         lr_scheduler = self.lr_schedulers()
         lr_scheduler.step()
         self.model.save_pretrained(self.save_path)

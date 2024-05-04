@@ -66,8 +66,8 @@ class LitLlamaLora_CausalTask(LightningModule):
             "metric_dict": {},
         }
 
-    def on_validation_epoch_end(self, *args, **kwargs):
-        super().on_validation_epoch_end(*args, **kwargs)
+    def on_train_epoch_end(self, *args, **kwargs):
+        super().on_train_epoch_end(*args, **kwargs)
         self.model.save_pretrained(self.save_path)
 
     def predict_forward(self, batch, *args, **kwargs):
