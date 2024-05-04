@@ -1,0 +1,41 @@
+data:
+  class_path: lightning_template.LightningDataModule
+  init_args:
+    dataset_cfg:
+      split_info:
+        split_format_to: [subset]
+        split_name_map:
+          val: valid
+          test: test
+          predict: test
+      fit:
+        class_path: project.datasets.eli5_category.ELI5Dataset
+        init_args:
+          subset: ${split}
+      val:
+        - {}
+        - init_args:
+            subset: test
+    dataloader_cfg:
+      batch_size: 8
+      prefetch_factor: null
+      pin_memory: true
+      collate_fn:
+        class_path: transformers.DataCollatorForSeq2Seq
+        init_args:
+          tokenizer:
+            class_path: transformers.LlamaTokenizer
+            init_args:
+              vocab_file: "/home/wf/Projects/wangyu/model/llama2-hf/tokenizer.model"
+              pad_token: "<unk>"
+              pad_token_id: 0
+              padding_side: "left"
+              legacy: false
+          padding: true
+          pad_to_multiple_of: 8
+
+trainer:
+  logger:
+    init_args:
+      tags:
+        pre_item: eli5_category
